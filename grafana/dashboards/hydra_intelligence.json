@@ -1,0 +1,419 @@
+{
+  "uid": "hydra-intelligence",
+  "title": "HYDRA \u2014 Intelligence",
+  "tags": [
+    "hydra"
+  ],
+  "schemaVersion": 36,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "style": "dark",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Products Generated Rate (1h)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra:product_generation_rate_1h",
+          "legendFormat": "{{product_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Intelligence products generated per second, per product type (recording rule)."
+    },
+    {
+      "id": 2,
+      "title": "Generation Duration P95 (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, product_type) (rate(hydra_product_generation_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{product_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "description": "95th percentile product-generation duration, per product type."
+    },
+    {
+      "id": 3,
+      "title": "Confidence Score Distribution (P50/P95)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by (le, product_type) (rate(hydra_product_confidence_score_bucket[5m])))",
+          "legendFormat": "p50 {{product_type}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, product_type) (rate(hydra_product_confidence_score_bucket[5m])))",
+          "legendFormat": "p95 {{product_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "description": "Confidence score distribution per product type."
+    },
+    {
+      "id": 4,
+      "title": "Completeness Score Distribution (P50/P95)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by (le, product_type) (rate(hydra_product_completeness_score_bucket[5m])))",
+          "legendFormat": "p50 {{product_type}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, product_type) (rate(hydra_product_completeness_score_bucket[5m])))",
+          "legendFormat": "p95 {{product_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "description": "Completeness score distribution per product type."
+    },
+    {
+      "id": 5,
+      "title": "Source Tier Coverage (avg tiers per product)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_product_source_tiers",
+          "legendFormat": "{{product_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Average number of distinct source tiers contributing to products of a given type."
+    },
+    {
+      "id": 6,
+      "title": "Correlation Rate (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra:correlation_rate_5m",
+          "legendFormat": "{{pipeline_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Correlations emitted per second, per pipeline (recording rule)."
+    },
+    {
+      "id": 7,
+      "title": "Correlation Confidence (P50/P95)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by (le, pipeline_id) (rate(hydra_correlation_confidence_bucket[5m])))",
+          "legendFormat": "p50 {{pipeline_id}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, pipeline_id) (rate(hydra_correlation_confidence_bucket[5m])))",
+          "legendFormat": "p95 {{pipeline_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "description": "Correlation confidence distribution per pipeline."
+    },
+    {
+      "id": 8,
+      "title": "Tier Pair Frequency (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum by (tier_a, tier_b) (rate(hydra_correlation_tier_pair_total[5m]))",
+          "legendFormat": "{{tier_a}} \u2194 {{tier_b}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Rate of correlations by pair of linked source tiers."
+    },
+    {
+      "id": 9,
+      "title": "Anomaly Flags",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_anomaly_flag",
+          "legendFormat": "{{detector}} / {{pipeline_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "description": "Anomaly flags: 1 when the detector flags an anomaly in the current cycle."
+    },
+    {
+      "id": 10,
+      "title": "Correlation Volume Z-Score",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_anomaly_correlation_volume_zscore",
+          "legendFormat": "{{pipeline_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "description": "Z-score of correlation volume vs rolling baseline per pipeline."
+    },
+    {
+      "id": 11,
+      "title": "Confidence Drift Z-Score",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_anomaly_confidence_drift_zscore",
+          "legendFormat": "{{pipeline_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "description": "Z-score of mean correlation confidence vs rolling baseline per pipeline."
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  }
+}

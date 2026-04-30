@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3">
+  <RESOURCE type="results">
+    <TABLE>
+      <FIELD name="ra" datatype="double" unit="deg" ucd="pos.eq.ra" />
+      <FIELD name="dec" datatype="double" unit="deg" ucd="pos.eq.dec" />
+      <FIELD name="mag" datatype="float" unit="mag" ucd="phot.mag" />
+      <FIELD name="name" datatype="char" arraysize="*" ucd="meta.id" />
+      <DATA>
+        <TABLEDATA>
+          <TR><TD>180.0</TD><TD>-45.0</TD><TD>12.5</TD><TD>Star_A</TD></TR>
+          <TR><TD>90.5</TD><TD>30.2</TD><TD>8.3</TD><TD>Star_B</TD></TR>
+          <TR><TD>270.1</TD><TD>-10.0</TD><TD>15.1</TD><TD>Star_C</TD></TR>
+          <TR><TD>45.0</TD><TD>60.0</TD><TD></TD><TD>Star_D</TD></TR>
+          <TR><TD>350.0</TD><TD>-80.5</TD><TD>20.0</TD><TD>Star_E</TD></TR>
+        </TABLEDATA>
+      </DATA>
+    </TABLE>
+  </RESOURCE>
+</VOTABLE>

@@ -1,0 +1,155 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - influxdb
+      - elasticsearch
+      - neo4j
+      - minio
+      - redis
+    environment:
+      HYDRA_DATABASE__POSTGRES_DSN: "postgresql+asyncpg://hydra:hydra@postgres:5432/hydra"
+      HYDRA_DATABASE__INFLUXDB_URL: "http://influxdb:8086"
+      HYDRA_DATABASE__ELASTICSEARCH_URL: "http://elasticsearch:9200"
+      HYDRA_DATABASE__NEO4J_URI: "bolt://neo4j:7687"
+      HYDRA_DATABASE__MINIO_URL: "http://minio:9000"
+      HYDRA_DATABASE__REDIS_URL: "redis://redis:6379/0"
+    networks:
+      hydra-net:
+        # Prometheus is configured to scrape ``hydra-api:8000`` (see
+        # prometheus/prometheus.yml). The compose service is historically
+        # named ``api``, so expose that name as a network alias.
+        aliases:
+          - hydra-api
+
+  postgres:
+    image: postgis/postgis:16-3.4
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: hydra
+      POSTGRES_USER: hydra
+      POSTGRES_PASSWORD: hydra
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - hydra-net
+
+  influxdb:
+    image: influxdb:2.7
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    networks:
+      - hydra-net
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    ports:
+      - "9200:9200"
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - hydra-net
+
+  neo4j:
+    image: neo4j:5.25
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/hydrapass
+    volumes:
+      - neo4j-data:/data
+    networks:
+      - hydra-net
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: hydra
+      MINIO_ROOT_PASSWORD: hydrapass
+    volumes:
+      - minio-data:/data
+    networks:
+      - hydra-net
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    networks:
+      - hydra-net
+
+  # ----------------------------------------------------------------------
+  # P12 Observability stack: Prometheus, Alertmanager, Grafana
+  # Requirements 25.1, 25.2, 25.3
+  # ----------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    networks:
+      - hydra-net
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    networks:
+      - hydra-net
+
+  grafana:
+    image: grafana/grafana-oss:10.4.0
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - hydra-net
+
+networks:
+  hydra-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  influxdb-data:
+  elasticsearch-data:
+  neo4j-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:

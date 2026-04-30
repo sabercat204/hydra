@@ -1,0 +1,145 @@
+# HYDRA Prometheus recording rules (P12).
+#
+# Pre-computed aggregations used by Grafana dashboards and by SLO
+# computation. All output metrics are prefixed with `hydra:` and reference
+# only metrics defined in src/hydra/monitoring/metrics.py or produced by
+# prometheus_fastapi_instrumentator.
+#
+# Requirements: 18.1, 18.2, 18.3
+groups:
+  # ---------------------------------------------------------------------------
+  # 5-minute aggregations — high-resolution dashboard queries.
+  # ---------------------------------------------------------------------------
+  - name: hydra_recording_5m
+    interval: 5m
+    rules:
+      # Per-stream adapter success rate over 5m.
+      - record: hydra:adapter_success_rate_5m
+        expr: |
+          sum by (stream_id, tier) (
+            rate(hydra_adapter_fetch_total{status="success"}[5m])
+          )
+          /
+          clamp_min(
+            sum by (stream_id, tier) (rate(hydra_adapter_fetch_total[5m])),
+            1
+          )
+
+      # Adapter fetch duration percentiles over 5m.
+      - record: hydra:adapter_fetch_duration_p95_5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, stream_id, tier) (
+              rate(hydra_adapter_fetch_duration_seconds_bucket[5m])
+            )
+          )
+
+      - record: hydra:adapter_fetch_duration_p50_5m
+        expr: |
+          histogram_quantile(
+            0.50,
+            sum by (le, stream_id, tier) (
+              rate(hydra_adapter_fetch_duration_seconds_bucket[5m])
+            )
+          )
+
+      # Storage write latency p95 per engine over 5m.
+      - record: hydra:storage_write_duration_p95_5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, engine) (
+              rate(hydra_storage_write_duration_seconds_bucket[5m])
+            )
+          )
+
+      # API request latency percentiles over 5m
+      # (from prometheus_fastapi_instrumentator HTTP histogram).
+      - record: hydra:api_request_duration_p95_5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+          )
+
+      - record: hydra:api_request_duration_p50_5m
+        expr: |
+          histogram_quantile(
+            0.50,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+          )
+
+      # Ingestion throughput — records stored per second, grouped by tier.
+      - record: hydra:ingestion_rate_5m
+        expr: |
+          sum by (tier) (rate(hydra_adapter_records_stored_total[5m]))
+
+      # API 5xx error rate over 5m (share of all requests).
+      - record: hydra:api_error_rate_5m
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_requests_total[5m])), 1)
+
+      # Correlation emission rate per pipeline over 5m.
+      - record: hydra:correlation_rate_5m
+        expr: |
+          sum by (pipeline_id) (rate(hydra_correlation_total[5m]))
+
+  # ---------------------------------------------------------------------------
+  # 1-hour aggregations — long-term trends and SLO inputs.
+  # ---------------------------------------------------------------------------
+  - name: hydra_recording_1h
+    interval: 1h
+    rules:
+      - record: hydra:adapter_success_rate_1h
+        expr: |
+          sum by (stream_id, tier) (
+            rate(hydra_adapter_fetch_total{status="success"}[1h])
+          )
+          /
+          clamp_min(
+            sum by (stream_id, tier) (rate(hydra_adapter_fetch_total[1h])),
+            1
+          )
+
+      - record: hydra:adapter_fetch_duration_p95_1h
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, stream_id, tier) (
+              rate(hydra_adapter_fetch_duration_seconds_bucket[1h])
+            )
+          )
+
+      - record: hydra:storage_write_duration_p95_1h
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, engine) (
+              rate(hydra_storage_write_duration_seconds_bucket[1h])
+            )
+          )
+
+      - record: hydra:api_request_duration_p95_1h
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[1h]))
+          )
+
+      - record: hydra:ingestion_rate_1h
+        expr: |
+          sum by (tier) (rate(hydra_adapter_records_stored_total[1h]))
+
+      # Intelligence products generated per second per product type.
+      - record: hydra:product_generation_rate_1h
+        expr: |
+          sum by (product_type) (rate(hydra_product_generated_total[1h]))
+
+      # DLQ growth rate per engine — positive = growing, negative = draining.
+      # hydra_storage_dlq_depth is a gauge, so deriv() gives bytes-per-second
+      # slope over the window.
+      - record: hydra:dlq_growth_rate_1h
+        expr: deriv(hydra_storage_dlq_depth[1h])

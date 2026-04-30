@@ -1,0 +1,279 @@
+# HYDRA Prometheus alert rules (P12).
+#
+# Three groups:
+#   - hydra_critical : page immediately (PagerDuty + Slack)
+#   - hydra_slo      : multi-window SLO burn-rate alerts
+#   - hydra_warning  : investigate during business hours (Slack)
+#
+# All PromQL expressions reference either:
+#   (a) HYDRA custom metrics registered in src/hydra/monitoring/metrics.py,
+#   (b) HTTP metrics produced by prometheus_fastapi_instrumentator
+#       (http_requests_total, http_request_duration_seconds_bucket,
+#        http_requests_in_progress), or
+#   (c) Prometheus built-ins (up).
+#
+# Requirements: 15.1-15.6, 16.1-16.8, 19.1, 19.2
+groups:
+  # ---------------------------------------------------------------------------
+  # Critical alerts — page on-call immediately.
+  # ---------------------------------------------------------------------------
+  - name: hydra_critical
+    interval: 30s
+    rules:
+      # Req 15.1 — Scheduler health status is UNREACHABLE (0) for 2m.
+      - alert: HydraSchedulerUnreachable
+        expr: hydra_scheduler_health_status == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: "HYDRA scheduler is unreachable"
+          description: >-
+            hydra_scheduler_health_status has been 0 (UNREACHABLE) for 2
+            minutes. Adapter cadences are not firing — data ingestion has
+            halted. Investigate scheduler connectivity and health aggregator
+            logs.
+          runbook_url: "https://runbooks.hydra/scheduler-unreachable"
+
+      # Req 15.2 — Primary storage engine (postgres or redis) is DOWN for 1m.
+      - alert: HydraStoragePrimaryDown
+        expr: hydra_storage_health_status{engine=~"postgres|redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: storage
+        annotations:
+          summary: "HYDRA primary storage engine {{ $labels.engine }} is down"
+          description: >-
+            hydra_storage_health_status for engine {{ $labels.engine }} has
+            been 0 (UNREACHABLE) for 1 minute. This is a primary storage
+            dependency — writes will fail and API reads will degrade.
+          runbook_url: "https://runbooks.hydra/storage-primary-down"
+
+      # Req 15.3 — Backpressure is BLOCKED (2) for 5m on any engine.
+      - alert: HydraBackpressureBlocked
+        expr: hydra_backpressure_state == 2
+        for: 5m
+        labels:
+          severity: critical
+          component: backpressure
+        annotations:
+          summary: "HYDRA backpressure BLOCKED on {{ $labels.engine }}"
+          description: >-
+            hydra_backpressure_state for engine {{ $labels.engine }} has been
+            2 (BLOCKED) for 5 minutes. Writes are being rejected and the WAQ
+            may be growing unbounded. Investigate downstream storage
+            throughput and WAQ depth.
+          runbook_url: "https://runbooks.hydra/backpressure-blocked"
+
+      # Req 15.4 — DLQ depth exceeds 500 on any engine for 10m.
+      - alert: HydraDLQCritical
+        expr: hydra_storage_dlq_depth > 500
+        for: 10m
+        labels:
+          severity: critical
+          component: storage
+        annotations:
+          summary: "HYDRA DLQ depth critical on {{ $labels.engine }}"
+          description: >-
+            hydra_storage_dlq_depth for engine {{ $labels.engine }} is
+            {{ $value }} (> 500) for 10 minutes. A large DLQ indicates
+            systematic write failures — inspect DLQ contents and root cause
+            before data is lost beyond retention.
+          runbook_url: "https://runbooks.hydra/dlq-critical"
+
+      # Req 15.5 — HYDRA API scrape target is down for 1m.
+      - alert: HydraAPIDown
+        expr: up{job="hydra-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "HYDRA API is down"
+          description: >-
+            Prometheus cannot scrape the HYDRA API /metrics endpoint
+            (up{job="hydra-api"} == 0) for 1 minute. The API is likely
+            unreachable or has crashed. Check container status and logs.
+          runbook_url: "https://runbooks.hydra/api-down"
+
+  # ---------------------------------------------------------------------------
+  # SLO multi-window burn-rate alerts.
+  # ---------------------------------------------------------------------------
+  - name: hydra_slo
+    interval: 30s
+    rules:
+      # Req 15.6 — 1h burn > 14.4 AND 6h burn > 6 for 5m (fast burn).
+      - alert: HydraSLOBurnRateCritical
+        expr: |
+          hydra_slo_burn_rate_1h > 14.4
+          and on (slo_name) hydra_slo_burn_rate_6h > 6
+        for: 5m
+        labels:
+          severity: critical
+          component: slo
+        annotations:
+          summary: "HYDRA SLO {{ $labels.slo_name }} fast burn"
+          description: >-
+            SLO {{ $labels.slo_name }} is burning error budget at
+            burn_rate_1h={{ $value }} (>14.4) and burn_rate_6h>6 for 5
+            minutes. At this rate the 30-day error budget will be exhausted
+            in hours. Immediate investigation required.
+          runbook_url: "https://runbooks.hydra/slo-fast-burn"
+
+      # Req 16.8 — 1h burn > 3 AND 6h burn > 1 for 30m (slow burn).
+      - alert: HydraSLOBurnRateWarning
+        expr: |
+          hydra_slo_burn_rate_1h > 3
+          and on (slo_name) hydra_slo_burn_rate_6h > 1
+        for: 30m
+        labels:
+          severity: warning
+          component: slo
+        annotations:
+          summary: "HYDRA SLO {{ $labels.slo_name }} elevated burn rate"
+          description: >-
+            SLO {{ $labels.slo_name }} is consuming error budget at an
+            elevated rate (burn_rate_1h>3 and burn_rate_6h>1) for 30
+            minutes. Budget will be exhausted within days if the trend
+            continues — investigate when convenient.
+          runbook_url: "https://runbooks.hydra/slo-slow-burn"
+
+  # ---------------------------------------------------------------------------
+  # Warning alerts — Slack only, no page.
+  # ---------------------------------------------------------------------------
+  - name: hydra_warning
+    interval: 30s
+    rules:
+      # Req 16.1 — Adapter failure rate > 30% over 15m window.
+      # failed / (success + failed + skipped) per stream.
+      - alert: HydraAdapterHighFailureRate
+        expr: |
+          (
+            sum by (stream_id, tier) (
+              rate(hydra_adapter_fetch_total{status="failed"}[15m])
+            )
+            /
+            sum by (stream_id, tier) (
+              rate(hydra_adapter_fetch_total[15m])
+            )
+          ) > 0.30
+        for: 15m
+        labels:
+          severity: warning
+          component: adapter
+        annotations:
+          summary: "HYDRA adapter {{ $labels.stream_id }} failure rate high"
+          description: >-
+            Adapter {{ $labels.stream_id }} (tier {{ $labels.tier }}) has a
+            failure rate of {{ $value | humanizePercentage }} over the last
+            15 minutes (threshold 30%). Check upstream source availability
+            and adapter logs.
+
+      # Req 16.2 — Async job failure rate > 20% for 15m.
+      # hydra_api_job_status is a gauge of job counts by status; use
+      # avg_over_time to smooth since it is sampled, not a rate.
+      - alert: HydraJobFailureRate
+        expr: |
+          (
+            avg_over_time(hydra_api_job_status{status="failed"}[15m])
+            /
+            clamp_min(
+              sum without (status) (avg_over_time(hydra_api_job_status[15m])),
+              1
+            )
+          ) > 0.20
+        for: 15m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "HYDRA async job failure rate high"
+          description: >-
+            Async job failure share is {{ $value | humanizePercentage }} over
+            the last 15 minutes (threshold 20%). Inspect failed job records
+            and recent deploys.
+
+      # Req 16.3 — API 5xx error rate > 5% for 5m.
+      - alert: HydraAPIErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total[5m])), 1)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "HYDRA API 5xx error rate high"
+          description: >-
+            API 5xx error rate is {{ $value | humanizePercentage }} over the
+            last 5 minutes (threshold 5%). Investigate recent deploys and
+            upstream dependency health.
+
+      # Req 16.4 — Rate-limit hits > 1/s averaged over 10m.
+      - alert: HydraRateLimitExhaustion
+        expr: sum(rate(hydra_api_rate_limit_hits_total[10m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "HYDRA API rate limit exhaustion"
+          description: >-
+            API rate-limit 429 rate is {{ $value }} per second over the last
+            10 minutes (threshold 1/s). A client may be overloading the API
+            or rate limits may be miscalibrated.
+
+      # Req 16.5 — Correlation-volume anomaly flag = 1 for 30m.
+      # The implementation emits detectors named "correlation_volume_zscore"
+      # and "correlation_volume_ewma"; match the family via regex.
+      - alert: HydraAnomalyCorrelationVolume
+        expr: hydra_anomaly_flag{detector=~"correlation_volume.*"} == 1
+        for: 30m
+        labels:
+          severity: warning
+          component: anomaly
+        annotations:
+          summary: "HYDRA correlation volume anomaly on pipeline {{ $labels.pipeline_id }}"
+          description: >-
+            Anomaly detector "{{ $labels.detector }}" has been flagging
+            correlation-volume anomalies on pipeline
+            {{ $labels.pipeline_id }} for 30 minutes. Investigate upstream
+            source volume and pipeline correctness.
+
+      # Req 16.6 — Confidence-drift anomaly flag = 1 for 30m (regex family).
+      - alert: HydraAnomalyConfidenceDrift
+        expr: hydra_anomaly_flag{detector=~"confidence_drift.*"} == 1
+        for: 30m
+        labels:
+          severity: warning
+          component: anomaly
+        annotations:
+          summary: "HYDRA confidence drift anomaly on pipeline {{ $labels.pipeline_id }}"
+          description: >-
+            Anomaly detector "{{ $labels.detector }}" has been flagging
+            confidence-drift anomalies on pipeline
+            {{ $labels.pipeline_id }} for 30 minutes. Correlation confidence
+            distribution has shifted — review recent source or model
+            changes.
+
+      # Req 16.7 — Projected days to storage threshold < 30 for 1h.
+      # CapacityPlanner uses -1 as the sentinel for "no exhaustion projected";
+      # exclude that case explicitly.
+      - alert: HydraCapacityStorageLow
+        expr: hydra_capacity_days_to_threshold >= 0 and hydra_capacity_days_to_threshold < 30
+        for: 1h
+        labels:
+          severity: warning
+          component: capacity
+        annotations:
+          summary: "HYDRA capacity low on {{ $labels.engine }}"
+          description: >-
+            Projected days to threshold for engine {{ $labels.engine }} is
+            {{ $value }} (< 30) for 1 hour. Plan a capacity expansion or
+            enable aggressive retention before the threshold is hit.
+          runbook_url: "https://runbooks.hydra/capacity-low"

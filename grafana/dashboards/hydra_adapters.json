@@ -1,0 +1,407 @@
+{
+  "uid": "hydra-adapters",
+  "title": "HYDRA \u2014 Adapters",
+  "tags": [
+    "hydra"
+  ],
+  "schemaVersion": 36,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "style": "dark",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Adapter Fetch Duration P95 (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra:adapter_fetch_duration_p95_5m",
+          "legendFormat": "{{stream_id}} ({{tier}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "description": "95th percentile adapter fetch latency, per stream."
+    },
+    {
+      "id": 2,
+      "title": "Adapter Fetch Duration P50 (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra:adapter_fetch_duration_p50_5m",
+          "legendFormat": "{{stream_id}} ({{tier}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "description": "Median adapter fetch latency, per stream."
+    },
+    {
+      "id": 3,
+      "title": "Records Fetched Rate (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum by (tier) (rate(hydra_adapter_records_fetched_total[5m]))",
+          "legendFormat": "{{tier}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Records fetched from upstream per second, grouped by tier."
+    },
+    {
+      "id": 4,
+      "title": "Records Stored Rate (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra:ingestion_rate_5m",
+          "legendFormat": "{{tier}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Records successfully persisted per second, grouped by tier (recording rule)."
+    },
+    {
+      "id": 5,
+      "title": "Dedup Rate (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum by (tier) (rate(hydra_adapter_records_deduplicated_total[5m]))",
+          "legendFormat": "{{tier}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Records discarded by deduplication per second, grouped by tier."
+    },
+    {
+      "id": 6,
+      "title": "Fallback Activations (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum by (stream_id, tier) (rate(hydra_adapter_fallback_total[5m]))",
+          "legendFormat": "{{stream_id}} ({{tier}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Rate of fallback adapter activations per stream."
+    },
+    {
+      "id": 7,
+      "title": "Consecutive Failures (per stream)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_adapter_consecutive_failures",
+          "legendFormat": "{{stream_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Current consecutive failure count \u2014 approaching threshold means stream is near dead."
+    },
+    {
+      "id": 8,
+      "title": "Adapter Health Status",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_adapter_health_status",
+          "legendFormat": "{{stream_id}} ({{tier}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "UNREACHABLE",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "DEGRADED",
+                  "color": "orange",
+                  "index": 1
+                },
+                "2": {
+                  "text": "OK",
+                  "color": "green",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 2
+              }
+            ]
+          },
+          "min": 0,
+          "max": 2
+        },
+        "overrides": []
+      },
+      "description": "Per-stream adapter health: 0 UNREACHABLE, 1 DEGRADED, 2 OK."
+    },
+    {
+      "id": 9,
+      "title": "Concurrency by Cadence",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_scheduler_active_by_cadence",
+          "legendFormat": "active {{cadence}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_scheduler_concurrency_limit",
+          "legendFormat": "limit {{cadence}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Active adapters vs configured concurrency limit, per cadence."
+    },
+    {
+      "id": 10,
+      "title": "SLA Misses Rate (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum by (cadence) (rate(hydra_scheduler_sla_misses_total[5m]))",
+          "legendFormat": "{{cadence}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Rate of SLA miss events by cadence."
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  }
+}

@@ -1,0 +1,116 @@
+# HYDRA Alertmanager configuration (P12).
+#
+# - Critical alerts → PagerDuty + Slack (#hydra-critical).
+# - Warning alerts  → Slack (#hydra-warning) only.
+# - Critical firing for an (alertname, engine) pair inhibits the matching
+#   warning alert to avoid duplicate noise.
+#
+# Webhook URLs and the PagerDuty routing key are placeholders — operators
+# MUST set them via environment (e.g., a docker-compose environment_file
+# with SLACK_WEBHOOK_URL / PAGERDUTY_ROUTING_KEY) or a secret manager
+# before deploying. Literal values in this file are intentionally invalid.
+#
+# Requirements: 17.1, 17.2, 17.3, 17.4
+global:
+  resolve_timeout: 5m
+  # Default Slack webhook — overridden per-receiver below.
+  slack_api_url: "<SET_IN_ENVIRONMENT:SLACK_WEBHOOK_URL>"
+
+# ---------------------------------------------------------------------------
+# Routing tree.
+# ---------------------------------------------------------------------------
+route:
+  receiver: slack-warning
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Critical alerts fan out to BOTH PagerDuty and Slack via the
+    # continue=true pattern: the first matching route sends to PagerDuty,
+    # Alertmanager then continues evaluating and matches the second route
+    # to send the same alert to Slack.
+    - matchers:
+        - severity = "critical"
+      receiver: pagerduty-critical
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      continue: true
+
+    - matchers:
+        - severity = "critical"
+      receiver: slack-critical
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      continue: false
+
+    # Warning alerts go to the warning Slack channel.
+    - matchers:
+        - severity = "warning"
+      receiver: slack-warning
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+
+# ---------------------------------------------------------------------------
+# Inhibition — a firing critical suppresses warnings with the same
+# alertname/engine pair so operators aren't paged twice for the same issue.
+# The equal list covers both alertname and engine; alerts without an
+# engine label still match on alertname alone (missing labels are treated
+# as empty and compare equal across source and target).
+# ---------------------------------------------------------------------------
+inhibit_rules:
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: [alertname, engine]
+
+# ---------------------------------------------------------------------------
+# Receivers.
+# ---------------------------------------------------------------------------
+receivers:
+  - name: pagerduty-critical
+    pagerduty_configs:
+      - routing_key: "<SET_IN_ENVIRONMENT:PAGERDUTY_ROUTING_KEY>"
+        severity: critical
+        description: "{{ .CommonAnnotations.summary }}"
+        details:
+          firing: "{{ .Alerts.Firing | len }}"
+          resolved: "{{ .Alerts.Resolved | len }}"
+          component: "{{ .CommonLabels.component }}"
+          runbook: "{{ .CommonAnnotations.runbook_url }}"
+
+  - name: slack-critical
+    slack_configs:
+      - api_url: "<SET_IN_ENVIRONMENT:SLACK_WEBHOOK_URL>"
+        channel: "#hydra-critical"
+        send_resolved: true
+        title: "[CRITICAL] {{ .CommonLabels.alertname }}"
+        text: |
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Component:* {{ .CommonLabels.component }}
+          *Firing:* {{ .Alerts.Firing | len }}  *Resolved:* {{ .Alerts.Resolved | len }}
+          {{ if .CommonAnnotations.runbook_url }}*Runbook:* {{ .CommonAnnotations.runbook_url }}{{ end }}
+
+  - name: slack-warning
+    slack_configs:
+      - api_url: "<SET_IN_ENVIRONMENT:SLACK_WEBHOOK_URL>"
+        channel: "#hydra-warning"
+        send_resolved: true
+        title: "[WARNING] {{ .CommonLabels.alertname }}"
+        text: |
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Component:* {{ .CommonLabels.component }}
+          *Firing:* {{ .Alerts.Firing | len }}  *Resolved:* {{ .Alerts.Resolved | len }}
+
+# ---------------------------------------------------------------------------
+# Notification templates (stubs). Adding files under /etc/alertmanager/
+# templates/ is supported but not required for the default receivers
+# above.
+# ---------------------------------------------------------------------------
+templates: []

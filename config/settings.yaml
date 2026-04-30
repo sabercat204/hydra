@@ -1,0 +1,35 @@
+database:
+  postgres_dsn: "postgresql+asyncpg://hydra:hydra@postgres:5432/hydra"
+  influxdb_url: "http://influxdb:8086"
+  influxdb_org: "hydra"
+  influxdb_bucket: "hydra-timeseries"
+  elasticsearch_url: "http://elasticsearch:9200"
+  neo4j_uri: "bolt://neo4j:7687"
+  minio_url: "http://minio:9000"
+  redis_url: "redis://redis:6379/0"
+  pg_pool_min: 5
+  pg_pool_max: 20
+  redis_pool_max: 20
+  writer_batch_size: 100
+  writer_poll_interval: 0.5
+  writer_max_retries: 3
+  reconciliation_interval: 300.0
+  reconciliation_max_retries: 5
+  reconciliation_alert_threshold: 100
+
+scheduler:
+  airflow_home: "/opt/airflow"
+  retry_count: 3
+  retry_delay_seconds: 60
+  global_rate_limit: 100
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8000"
+
+stream_registry_path: "src/hydra/registry/stream_registry.yaml"
+credential_store_path: "config/credentials.yaml"

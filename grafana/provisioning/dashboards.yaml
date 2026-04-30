@@ -1,0 +1,23 @@
+# Grafana dashboard provider provisioning for the HYDRA observability stack
+# (P12).
+#
+# Requirements: 20.2
+#
+# Loaded by Grafana on startup from /etc/grafana/provisioning/dashboards/.
+# File-based provider that reads JSON dashboards from
+# /var/lib/grafana/dashboards (mounted from grafana/dashboards/) and places
+# them into the "HYDRA" folder.
+apiVersion: 1
+
+providers:
+  - name: hydra
+    orgId: 1
+    folder: HYDRA
+    folderUid: hydra-folder
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

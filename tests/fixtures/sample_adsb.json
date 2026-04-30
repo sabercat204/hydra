@@ -1,0 +1,19 @@
+{
+  "ac": [
+    {"hex": "a1b2c3", "flight": "UAL123 ", "lat": 37.7749, "lon": -122.4194, "alt_baro": 10000, "gs": 250, "track": 180, "baro_rate": -5, "ground": false, "squawk": "1200", "now": 1700000000},
+    {"hex": "d4e5f6", "flight": "DAL456 ", "lat": 40.7128, "lon": -74.0060, "alt_baro": 35000, "gs": 450, "track": 90, "baro_rate": 0, "ground": false, "squawk": "2345", "now": 1700000001},
+    {"hex": "aabbcc", "flight": "SWA789 ", "lat": 33.9425, "lon": -118.4081, "alt_baro": 5000, "gs": 180, "track": 270, "baro_rate": 10, "ground": false, "squawk": "3456", "now": 1700000002},
+    {"hex": "112233", "flight": "AAL100 ", "lat": 41.9742, "lon": -87.9073, "alt_baro": 28000, "gs": 400, "track": 45, "baro_rate": 0, "ground": false, "squawk": "4567", "now": 1700000003},
+    {"hex": "445566", "flight": "JBU200 ", "lat": 25.7959, "lon": -80.2870, "alt_baro": 15000, "gs": 300, "track": 135, "baro_rate": -10, "ground": false, "squawk": "5678", "now": 1700000004},
+    {"hex": "778899", "flight": "FDX300 ", "lat": 38.1744, "lon": -85.7361, "alt_baro": 40000, "gs": 500, "track": 0, "baro_rate": 0, "ground": false, "squawk": "6789", "now": 1700000005},
+    {"hex": "aabb11", "flight": "SKW400 ", "lat": 47.4502, "lon": -122.3088, "alt_baro": 8000, "gs": 200, "track": 315, "baro_rate": 5, "ground": false, "squawk": "7012", "now": 1700000006},
+    {"hex": "cc2233", "flight": "ENY500 ", "lat": 29.9902, "lon": -95.3368, "alt_baro": 22000, "gs": 350, "track": 225, "baro_rate": 0, "ground": false, "squawk": "0123", "now": 1700000007},
+    {"hex": "dd4455", "flight": "ASA600 ", "lat": 61.1743, "lon": -149.9964, "alt_baro": 32000, "gs": 420, "track": 160, "baro_rate": -2, "ground": false, "squawk": "1234", "now": 1700000008},
+    {"hex": "ee6677", "flight": "NKS700 ", "lat": 26.0742, "lon": -80.1506, "alt_baro": 12000, "gs": 280, "track": 350, "baro_rate": 8, "ground": false, "squawk": "2345", "now": 1700000009}
+  ],
+  "msg": "No error",
+  "now": 1700000010,
+  "total": 10,
+  "ctime": 1700000010,
+  "ptime": 5
+}

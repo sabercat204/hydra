@@ -1,0 +1,23 @@
+# Grafana datasource provisioning for the HYDRA observability stack (P12).
+#
+# Requirements: 20.1
+#
+# Loaded by Grafana on startup from /etc/grafana/provisioning/datasources/.
+# Declares Prometheus as the default (and only) datasource; dashboards in
+# grafana/dashboards reference this datasource by UID ``hydra-prometheus``.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: hydra-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: "15s"
+      manageAlerts: false
+      prometheusType: Prometheus
+      prometheusVersion: "2.51.0"

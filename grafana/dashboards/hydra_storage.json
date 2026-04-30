@@ -1,0 +1,476 @@
+{
+  "uid": "hydra-storage",
+  "title": "HYDRA \u2014 Storage",
+  "tags": [
+    "hydra"
+  ],
+  "schemaVersion": 36,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "style": "dark",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Engine Health",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_storage_health_status",
+          "legendFormat": "{{engine}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "UNREACHABLE",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "DEGRADED",
+                  "color": "orange",
+                  "index": 1
+                },
+                "2": {
+                  "text": "OK",
+                  "color": "green",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 2
+              }
+            ]
+          },
+          "min": 0,
+          "max": 2
+        },
+        "overrides": []
+      },
+      "description": "Per-engine storage health: 0 UNREACHABLE, 1 DEGRADED, 2 OK."
+    },
+    {
+      "id": 2,
+      "title": "Health Check Latency",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_storage_health_latency_seconds",
+          "legendFormat": "{{engine}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "description": "Round-trip latency of the per-engine health probe."
+    },
+    {
+      "id": 3,
+      "title": "Write Duration P95 (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra:storage_write_duration_p95_5m",
+          "legendFormat": "{{engine}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "description": "95th percentile storage write batch latency, per engine (recording rule)."
+    },
+    {
+      "id": 4,
+      "title": "Write Success Rate (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum by (engine) (rate(hydra_storage_write_total{status=\"success\"}[5m])) / clamp_min(sum by (engine) (rate(hydra_storage_write_total[5m])), 1)",
+          "legendFormat": "{{engine}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "description": "Share of storage writes succeeding, per engine."
+    },
+    {
+      "id": 5,
+      "title": "WAQ Depth vs Limits",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_storage_waq_depth",
+          "legendFormat": "waq {{engine}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_backpressure_soft_limit",
+          "legendFormat": "soft {{engine}}"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_backpressure_hard_limit",
+          "legendFormat": "hard {{engine}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Write-ahead queue depth vs backpressure soft/hard limits, per engine."
+    },
+    {
+      "id": 6,
+      "title": "DLQ Depth",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_storage_dlq_depth",
+          "legendFormat": "{{engine}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Dead-letter queue depth per engine."
+    },
+    {
+      "id": 7,
+      "title": "DLQ Growth Rate (1h)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra:dlq_growth_rate_1h",
+          "legendFormat": "{{engine}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Slope of DLQ depth over 1h \u2014 positive means DLQ is growing."
+    },
+    {
+      "id": 8,
+      "title": "Redis Dedup Hits (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum by (tier) (rate(hydra_storage_dedup_redis_total[5m]))",
+          "legendFormat": "{{tier}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Dedup hits served by Redis before the PG fallback, per tier."
+    },
+    {
+      "id": 9,
+      "title": "PG Fallback Dedup (5m)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum by (tier) (rate(hydra_storage_dedup_pg_fallback_total[5m]))",
+          "legendFormat": "{{tier}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Dedup events caught by PG unique constraint (Redis miss), per tier."
+    },
+    {
+      "id": 10,
+      "title": "Records by Status",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_storage_records_total",
+          "legendFormat": "{{tier}} / {{storage_status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Persisted record counts grouped by tier and storage status."
+    },
+    {
+      "id": 11,
+      "title": "Storage Sizes",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hydra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_capacity_pg_size_bytes",
+          "legendFormat": "postgres"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum(hydra_capacity_es_index_size_bytes)",
+          "legendFormat": "elasticsearch"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "hydra_capacity_influx_bucket_size_bytes",
+          "legendFormat": "influxdb"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hydra-prometheus"
+          },
+          "expr": "sum(hydra_capacity_minio_bucket_size_bytes)",
+          "legendFormat": "minio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "description": "Aggregate size per engine (PG database, sum of ES indices, InfluxDB, sum of MinIO buckets)."
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  }
+}

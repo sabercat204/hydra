@@ -1,0 +1,48 @@
+# Prometheus scrape configuration for HYDRA (P12).
+#
+# - Scrapes the HYDRA FastAPI /metrics endpoint exposed by
+#   prometheus_fastapi_instrumentator (HTTP metrics) plus the ~47 custom
+#   hydra_* metrics registered by src/hydra/monitoring/metrics.py.
+# - Loads alert rules and recording rules from ./rules/.
+# - Forwards firing alerts to the Alertmanager service on the same Docker
+#   Compose network at alertmanager:9093.
+#
+# Requirements: 25.1, 25.4
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: hydra
+    environment: dev
+
+rule_files:
+  - /etc/prometheus/rules/hydra_alerts.yml
+  - /etc/prometheus/rules/hydra_recording.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # HYDRA FastAPI app — exposes /metrics via prometheus_fastapi_instrumentator.
+  # The job label "hydra-api" is referenced by the HydraAPIDown alert
+  # (up{job="hydra-api"} == 0).
+  - job_name: hydra-api
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets:
+          - hydra-api:8000
+        labels:
+          service: hydra-api
+
+  # Prometheus self-monitoring — ensures the HydraAPIDown "up == 0" pattern
+  # has a healthy comparison baseline on the same server.
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090

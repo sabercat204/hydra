@@ -1,0 +1,75 @@
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
+
+# Packaging wheels and lock files
+*.whl
+
+# ---------------------------------------------------------------------------
+# Testing / type checking / linting
+# ---------------------------------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+.tox/
+
+# ---------------------------------------------------------------------------
+# IDE / editor
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# OS junk
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# HYDRA / project-specific
+# ---------------------------------------------------------------------------
+# Upstream contract snapshots — these are generated artefacts
+upstream_contracts_*.md
+
+# Local secrets / env files
+.env
+.env.*
+!.env.example
+
+# Local scratch
+scratch_*.py
+scratch_*.txt
+*.local.yaml
+
+# Airflow runtime artefacts (if running locally)
+airflow.cfg
+airflow.db
+logs/
