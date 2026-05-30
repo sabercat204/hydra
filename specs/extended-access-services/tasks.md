@@ -1,0 +1,560 @@
+# Implementation Plan: Extended Access Services (EAS) — Phase 13
+
+## Overview
+
+This plan delivers HYDRA Phase 13 — Extended Access Services — in strict dependency order:
+scaffolding and migrations first, then the Tier 29 substrate, tenant plumbing, schemas,
+and storage mappings; capability packages next (assets, screenshots, CVEs, maps,
+trends/jobs, lookup, observatory); cross-cutting cost controls and observability;
+finally integration wiring and end-to-end acceptance tests.
+
+Each task references the specific requirements (`R<num>.<criterion>`) and design
+properties (`Property N`) it satisfies.
+
+## Tasks
+
+- [x] 1. Project scaffolding, configuration, and dependencies
+  - [x] 1.1 Create the `src/hydra/eas/` package tree with `__init__.py` for every sub-package per Design §2.4
+    - Create directories and `__init__.py` files under `src/hydra/eas/`: `assets/`, `screenshots/`, `cves/`, `maps/`, `trends/`, `lookup/`, `observatory/`, `jobs/`, `quota/`, `storage/`, `routers/`, `schemas/`.
+    - Top-level files stubbed: `src/hydra/eas/__init__.py`, `src/hydra/eas/settings.py`, `src/hydra/eas/setup.py`, `src/hydra/eas/dependencies.py`, `src/hydra/eas/metrics.py`.
+    - Create the `tests/eas/` directory with a `conftest.py` placeholder.
+    - _(satisfies Design §2.4 Module Layout)_
+  - [x] 1.2 Add `EASSettings` Pydantic v2 model in `src/hydra/eas/settings.py` and wire `HydraSettings.eas`
+    - Fields with defaults from Design §9 and R25.2: `asset_quota_per_tenant`, `exposure_matching_tiers`, `exposure_severity_map`, `exposure_dedup_ttl_seconds`, `indicator_extraction_map`, `cve_fingerprint_map`, `cve_match_mode`, `cve_severity_map`, `asn_database_path`, `screenshot` (nested: `viewport`, `timeout_seconds`, `max_concurrency`, `per_host_concurrency`, `ocr_enabled`, `ocr_max_chars`), `images_search_max_results`, `maps_aggregation_strategy`, `maps_feature_limit`, `maps_tile_max_cells`, `trends_max_window_days`, `lookup_cache_ttl_seconds`, `lookup_cache_max_entries`, `lookup_cache_redis_db`, `lookup_p95_latency_ms_target`, `posture_score_weights`, `cost_quota`, `per_tenant_webhook_url`, `observatory.publish_snapshot_minio`.
+    - Validators per Design §9 / R25.3–25.4: reject duplicate / out-of-range entries in `exposure_matching_tiers`; constrain `maps_aggregation_strategy` to `{"geohash","h3"}`; validate `posture_score_weights` sums to `1.0 ± 1e-6`.
+    - Extend `src/hydra/config.py::HydraSettings` with `eas: EASSettings = Field(default_factory=EASSettings)` overridable via `HYDRA__EAS__*`.
+    - _(satisfies R25.1, R25.2, R25.3, R25.4, Property 24)_
+  - [x] 1.3 Add `expensive` rate-limit tier fields to `APISettings`
+    - Add `rate_limit_expensive: int = 2` and `rate_limit_expensive_burst: int = 1` to `src/hydra/config.py::APISettings` (overridable via `HYDRA__API__RATE_LIMIT_EXPENSIVE` and `HYDRA__API__RATE_LIMIT_EXPENSIVE_BURST`).
+    - _(satisfies R21.1)_
+  - [x] 1.4 Add the optional `[eas]` extra to `pyproject.toml` with pinned dependencies
+    - Under `[project.optional-dependencies]` add `eas = [...]` listing: `playwright`, `imagehash`, `h3`, `python-geohash`, `nvdlib`, `cvelib`, `pytesseract`, `pyasn`, `ormsgpack`.
+    - Pin all versions; do not use open ranges.
+    - _(satisfies R26.1, R26.2, Design §13.4)_
+  - [x]* 1.5 Update the Docker image to install the Playwright Chromium binary during build
+    - Edit `Dockerfile` to add `RUN playwright install --with-deps chromium` after the `pip install -e ".[eas]"` step.
+    - _(satisfies R26.3)_
+  - [x]* 1.6 Add unit tests for `EASSettings` validator correctness
+    - File: `tests/eas/test_eas_settings.py`.
+    - **Property 24: EASSettings validator correctness** — `hypothesis` test generating `exposure_matching_tiers` lists and `maps_aggregation_strategy` strings, asserting the accept/reject semantics from R25.3 and R25.4.
+    - **Validates: R25.3, R25.4**
+    - _(satisfies Property 24)_
+
+- [x] 2. Database migrations (Alembic)
+  - [x] 2.1 Create `alembic/versions/eas_001_vulnerability_tier.py`
+    - `upgrade()`: drop `chk_tier` constraint on `normalized_records` and re-add with `CHECK (tier >= 1 AND tier <= 29)`.
+    - `downgrade()`: symmetric revert to `tier <= 28`.
+    - _(satisfies R9.1, R24.1, Design §4.10)_
+  - [x] 2.2 Create `alembic/versions/eas_002_api_keys_tenant_id.py`
+    - `upgrade()` per Design §3.1 three-step backfill: (1) `ADD COLUMN tenant_id UUID NULL`; (2) data-migration pass assigning one fresh UUID4 per distinct `name` prefix (or per key when the name does not follow `{tenant_slug}-{keyname}`); (3) `ALTER COLUMN tenant_id SET NOT NULL`; (4) `CREATE INDEX idx_api_keys_tenant ON api_keys(tenant_id)`.
+    - `downgrade()`: drop the index and the column.
+    - _(satisfies R20.1, R24.4, Design §3.1)_
+  - [x] 2.3 Create `alembic/versions/eas_003_assets_tables.py`
+    - `upgrade()`: create `assets`, `asset_exposures`, `exposure_alert_deliveries` tables using the DDL in Design §4.10 (columns, CHECK constraints, defaults, foreign keys).
+    - `downgrade()`: drop in reverse order.
+    - _(satisfies R24.1, Design §4.10)_
+  - [x] 2.4 Create `alembic/versions/eas_004_asset_exposures_indexes.py`
+    - `upgrade()`: create `idx_assets_tenant_type_value_active` (partial unique), `idx_assets_tenant`, `idx_assets_type_value`, `idx_asset_exposures_asset_created`, `idx_asset_exposures_dedup` (partial unique), `idx_asset_exposures_tenant_created`, `idx_exposure_alert_deliveries_exposure`.
+    - `downgrade()`: drop all indexes.
+    - _(satisfies R24.2, R24.3, Design §4.10)_
+  - [x] 2.5 Integration test verifying migration upgrade → downgrade → upgrade cycle and index presence
+    - File: `tests/eas/test_migrations.py`.
+    - Run `alembic upgrade head`, then `downgrade -4`, then `upgrade head` against a disposable PG instance; assert that the tables and every index created in 2.1–2.4 exist after the final upgrade and are absent after the downgrade.
+    - _(satisfies R24.1–R24.4)_
+
+- [x] 3. Tier 29 (Vulnerability Intelligence) ingestion substrate
+  - [x] 3.1 Extend `Tier` enum in `src/hydra/models/normalized.py`
+    - Add `VULNERABILITY_INTELLIGENCE = 29` to the `Tier` enum with matching metadata entry.
+    - _(satisfies R9.1)_
+  - [x] 3.2 Register Tier 29 streams in `src/hydra/registry/stream_registry.yaml`
+    - Add streams `nvd-cve`, `first-epss`, `cisa-kev`, `exploitdb`, `metasploit-modules` under Tier 29, each with the correct adapter_type (`rest_json`) and auth pattern per Design §13.4.
+    - _(satisfies R9.1)_
+  - [x] 3.3 Implement Tier 29 REST-based adapters
+    - Create a shared base class `Tier29RestAdapter` under `src/hydra/adapters/` (or subclass `RestJSONAdapter`) that knows how to emit `NormalizedRecord` with `tier = Tier.VULNERABILITY_INTELLIGENCE` and source-specific `raw_hash` schemes.
+    - One adapter per stream producing payloads per R9.2–R9.6: NVD (`{cve_id, published, last_modified, cvss_v3_score, cvss_v3_vector, cwe_ids, references, affected_cpes, description}` with `raw_hash = xxhash64(f"nvd:{cve_id}:{last_modified}")`), EPSS (`{cve_id, epss_score, epss_percentile, score_date}`), KEV (`{cve_id, vendor, product, date_added, due_date, required_action, known_ransomware_use}`), ExploitDB (`{exploit_id, title, type, platform, published_date, author, cve_ids, source_url}`), Metasploit (`{module_path, module_type, rank, disclosure_date, cve_ids, description, platforms}`).
+    - _(satisfies R9.2, R9.3, R9.4, R9.5, R9.6)_
+  - [x]* 3.4 Unit tests for Tier 29 adapters
+    - File: `tests/eas/test_cves_ingestion.py` with fixtures exercising each adapter on a canned HTTP response and asserting payload shape + `raw_hash` determinism.
+    - File: `tests/eas/test_tier_29.py` verifying that `Tier.VULNERABILITY_INTELLIGENCE == 29` and that the stream registry surfaces all five new streams.
+    - _(satisfies R9.1–R9.6)_
+  - [x]* 3.5 Unit test for `hydra_eas_cve_records_total` emission
+    - Extend `tests/eas/test_cves_ingestion.py` to assert that ingesting one record per source increments the counter with the correct `source` label.
+    - _(satisfies R9.7)_
+
+- [x] 4. Tenant identity plumbing
+  - [x] 4.1 Extend `APIKeyRecord` with `tenant_id`
+    - Add `tenant_id: UUID` field to `APIKeyRecord` in `src/hydra/api/dependencies.py`.
+    - Update the PG fallback `SELECT` in `get_current_api_key` to include `tenant_id`.
+    - _(satisfies R20.1, R20.2)_
+  - [x] 4.2 Add `get_current_tenant_id` dependency
+    - Add `async def get_current_tenant_id(api_key: APIKeyRecord = Depends(get_current_api_key)) -> UUID: return api_key.tenant_id` in `src/hydra/api/dependencies.py` (and re-export from `src/hydra/eas/dependencies.py`).
+    - _(satisfies R20.2)_
+  - [x] 4.3 Extend `scripts/create_api_key.py` with `--tenant-id`
+    - Accept `--tenant-id <uuid>`; when omitted, generate a fresh UUID4 and print it alongside the raw key per Design §3.1.
+    - _(satisfies R20.1, Design §3.1)_
+  - [x]* 4.4 Tests for tenant auth plumbing
+    - File: `tests/eas/test_tenant_auth.py` asserting `APIKeyRecord.tenant_id` is populated from the PG path, that `get_current_tenant_id` returns it, and that the `create_api_key` CLI yields a UUID when `--tenant-id` is omitted.
+    - _(satisfies R20.1, R20.2)_
+
+- [x] 5. Pydantic v2 schemas for all EAS routers
+  - [x] 5.1 Create `src/hydra/eas/schemas/__init__.py` re-exporting the schema modules
+    - _(satisfies Design §4.1)_
+  - [x] 5.2 Create `src/hydra/eas/schemas/assets.py`
+    - `AssetType`, `ExposureSeverity`, `AssetCreate` (with `@model_validator(mode="after")` per Design §4.2 for every `asset_type`), `AssetResponse`, `ExposureResponse`.
+    - _(satisfies R1.1, R1.2, R2.1, R4.1, Design §4.2)_
+  - [x] 5.3 Create `src/hydra/eas/schemas/images.py`
+    - `ImageMetadataResponse`, `ImageSearchResult`, `ImageSearchParams` per Design §4.3.
+    - _(satisfies R7.2, R8.1, Design §4.3)_
+  - [x] 5.4 Create `src/hydra/eas/schemas/cves.py`
+    - `CVEDetailResponse`, `CVESearchResult`, `CVESearchParams`, `ExploitSearchResult` per Design §4.4.
+    - _(satisfies R11.1, R11.3, R11.5, Design §4.4)_
+  - [x] 5.5 Create `src/hydra/eas/schemas/maps.py`
+    - `TileCellResponse`, `FeatureResponse`, `FeatureCollectionResponse` per Design §4.5.
+    - _(satisfies R12.1, R13.1, Design §4.5)_
+  - [x] 5.6 Create `src/hydra/eas/schemas/trends.py`
+    - `TrendRequest`, `TrendPoint`, `TrendSeries`, `TrendResponse`, `JobProgressResponse`, plus `Bucket` and `Aggregation` literals per Design §4.6.
+    - _(satisfies R14.1, R15.3, Design §4.6)_
+  - [x] 5.7 Create `src/hydra/eas/schemas/lookup.py`
+    - `IndicatorClass`, `LookupAssetReference`, `LookupRecordSummary`, `LookupCVECorrelation`, `LookupScreenshotRef`, `LookupResponse` per Design §4.7.
+    - _(satisfies R16.1, R17.2, Design §4.7)_
+  - [x] 5.8 Create `src/hydra/eas/schemas/observatory.py`
+    - `CountryPostureSection`, `CountryPostureResponse`, `ExposurePostureReportResponse` per Design §4.8.
+    - _(satisfies R18.2, R19.5, Design §4.8)_
+
+- [x] 6. Storage mappings and bootstrap
+  - [x] 6.1 Create `src/hydra/eas/storage/es_mappings.py`
+    - Export `HYDRA_SCREENSHOTS_MAPPING` and `HYDRA_CVES_MAPPING` exactly as specified in Design §4.11.
+    - _(satisfies R24.5, Design §4.11)_
+  - [x] 6.2 Create `src/hydra/eas/storage/bootstrap.py`
+    - `async def create_index_if_absent(es_client, name: str, mapping: dict) -> None` idempotent helper that checks `indices.exists` before creating.
+    - `async def bootstrap_eas_indices(es_client, settings)` calling the helper for both mappings.
+    - _(satisfies R24.5)_
+  - [x]* 6.3 Integration test for bootstrap idempotency
+    - File: `tests/eas/test_es_bootstrap.py` running `bootstrap_eas_indices` twice against a test ES instance and asserting no errors and stable mappings.
+    - _(satisfies R24.5)_
+
+- [x] 7. Capability 1 — Asset Exposure Monitoring
+  - [x] 7.1 Implement `src/hydra/eas/assets/models.py`
+    - `@dataclass(slots=True, frozen=True)` for `Asset`, `ExposureEvent`, `AssetMatch` per Design §4.9.
+    - _(satisfies Design §4.9)_
+  - [x]* 7.2 Property test for asset-value normalization fixpoint
+    - File: `tests/eas/test_assets.py` with `test_property_normalize_fixpoint`.
+    - **Property 3: Asset-value and indicator normalization are fixpoints** — hypothesis-generated values for each `AssetType`, assert `normalize(normalize(x)) == normalize(x)`.
+    - **Validates: R1.3, R27.3**
+    - _(satisfies Property 3)_
+  - [x] 7.3 Implement `src/hydra/eas/assets/normalizer.py`
+    - `normalize_asset_value(asset_type: AssetType, raw: str) -> str` per-type: IPv6-compact IPs, canonicalize CIDR, lowercase/trim domains and hostnames, `AS`-strip ASNs (Design §3.2 table).
+    - _(satisfies R1.3, Property 3)_
+  - [x]* 7.4 Property test for AssetMatcher determinism
+    - File: `tests/eas/test_asset_matcher.py`.
+    - **Property 7: Exposure-matching correctness (match determinism)** — hypothesis-generated `(indicator, asset)` pairs covering all five `asset_type` matching semantics; assert `is_match(indicator, asset) == is_match(indicator, asset)` across repeated calls and across worker processes.
+    - **Validates: R3.1, R3.2, R27.7**
+    - _(satisfies Property 7)_
+  - [x] 7.5 Implement `src/hydra/eas/assets/matcher.py`
+    - `AssetMatcher.is_match(indicator: str, asset: Asset) -> bool` as a pure function dispatching on `asset.asset_type` per Design §3.2 (ip exact, cidr containment, domain suffix, hostname exact ci, asn equality via `pyasn` lookup).
+    - ASN lookup wrapper loads the `pyasn` database from `EASSettings.asn_database_path`; on unavailable DB returns `False` and increments `hydra_eas_asn_lookup_failure_total`.
+    - _(satisfies R3.1, R3.2, Property 7, Design §3.2)_
+  - [x] 7.6 Implement `src/hydra/eas/assets/extractor.py`
+    - `IndicatorExtractor.extract(record: NormalizedRecord) -> list[Indicator]` driven by `EASSettings.indicator_extraction_map` — returns classified `(class, value)` tuples from the record payload per R3.1.
+    - _(satisfies R3.1)_
+  - [x] 7.7 Implement `src/hydra/eas/assets/repository.py`
+    - `AssetRepository.upsert(tenant_id, body)` with `ON CONFLICT (tenant_id, asset_type, normalized_value) WHERE is_active DO UPDATE ... RETURNING` per Design §6.1.
+    - `AssetRepository.list_active(tenant_id, filters)` with cursor on `(created_at DESC, asset_id)`; filters by `asset_type`.
+    - `AssetRepository.get(tenant_id, asset_id)` — 404-on-miss semantics enforced by tenant-scoped `WHERE`.
+    - `AssetRepository.deactivate(tenant_id, asset_id)` setting `is_active = FALSE`, `deactivated_at = NOW()`.
+    - `AssetRepository.list_matching(indicator)` used by `AssetMonitor`.
+    - `AssetRepository.count_active(tenant_id)` for quota enforcement per R1.4.
+    - `ExposureRepository.insert_exposure` with `ON CONFLICT (asset_id, record_hash, matched_indicator) DO NOTHING RETURNING` per Design §6.1.
+    - `ExposureRepository.list_for_asset(asset_id, tenant_id, filters)` and `.list_for_tenant(tenant_id, filters)` with cursor on `(created_at DESC, exposure_id)`; filters by `severity` list and `since`.
+    - _(satisfies R1.1, R1.3, R1.4, R2.1, R2.2, R2.3, R2.4, R3.2, R3.3, R4.1, R4.2, R4.3, R4.4, R20.3, R20.4)_
+  - [x] 7.8 Implement `src/hydra/eas/assets/alerter.py`
+    - `ExposureAlerter.send(exposure: ExposureEvent) -> None` posting Alertmanager v2 JSON payload to `eas-critical` for `severity == "critical"` and `eas-warning` for `severity == "high"` per Design §8.1.
+    - Optional tenant webhook delivery when `EASSettings.per_tenant_webhook_url` is configured for the tenant.
+    - Persist a row in `exposure_alert_deliveries`.
+    - _(satisfies R3.4, R5.1, R5.2, R5.3, R5.4)_
+  - [x] 7.9 Implement `src/hydra/eas/assets/monitor.py`
+    - `AssetMonitor.on_record_ingested(record)` flow per Design §2.2: tier filter → Redis SETNX dedup (key `hydra:eas:exposure_processed:{raw_hash}` TTL `EASSettings.exposure_dedup_ttl_seconds`) → `IndicatorExtractor.extract` → `AssetRepository.list_matching` → `AssetMatcher.is_match` per (indicator, asset) → compute `severity` via `EASSettings.exposure_severity_map` → `ExposureRepository.insert_exposure` → `ExposureAlerter.send` on high/critical → increment `hydra_eas_exposure_events_total{tenant_id, asset_type, tier, severity}`.
+    - Buffer overflow protection: in-process deque capped at 10 000 when PG is `BLOCKED`, increments `hydra_eas_exposure_buffer_overflow_total` on drop per Design §6.1.
+    - _(satisfies R3.1–R3.5, R5.1, R5.2)_
+  - [x] 7.10 Wire `AssetMonitor` into the storage writer post-insert hook
+    - Add a `post_insert_hooks: list[Callable[[NormalizedRecord], Awaitable[None]]]` registry to `src/hydra/storage/writer.py::StorageWriter` (no behavioral change when list is empty).
+    - In `flush_batch`, iterate inserted records and `await hook(record)` for each registered hook (minimal change per Design §8.1).
+    - _(satisfies R3.1, Design §8.1)_
+  - [x] 7.11 Implement `src/hydra/eas/routers/assets.py`
+    - Six endpoints per Design §7.1:
+      - `POST /api/v1/assets` → 201 `AssetResponse` with `write` tier, enforces per-tenant quota (R1.4 → 409 `ASSET_QUOTA_EXCEEDED`).
+      - `GET /api/v1/assets` → paged `AssetResponse` with optional `asset_type` filter and cursor pagination.
+      - `GET /api/v1/assets/{asset_id}` → `AssetResponse` (404 on cross-tenant).
+      - `DELETE /api/v1/assets/{asset_id}` → 204, soft-delete.
+      - `GET /api/v1/assets/{asset_id}/exposures` → paged `ExposureResponse` with `severity` and `since` filters.
+      - `GET /api/v1/exposures` → paged `ExposureResponse` across all tenant assets.
+    - All routes depend on `get_current_tenant_id`; enforce tenant-scoped queries at the repository layer.
+    - _(satisfies R1.1, R1.2, R1.3, R1.4, R2.1, R2.2, R2.3, R2.4, R4.1, R4.2, R4.3, R4.4, R20.3, R20.4, R21.3)_
+  - [x]* 7.12 Property test: asset-registration idempotency
+    - File: `tests/eas/test_assets.py::test_property_registration_idempotency`.
+    - **Property 1: Asset registration idempotency** — for valid `(tenant_id, asset_type, value)`, two sequential POSTs return the same `asset_id` and leave exactly one `assets` row.
+    - **Validates: R1.1, R1.3, R27.2**
+    - _(satisfies Property 1)_
+  - [x]* 7.13 Property test: malformed value rejection
+    - File: `tests/eas/test_assets.py::test_property_validation_atomic`.
+    - **Property 2: Asset input validation rejects malformed values atomically** — for invalid inputs, POST returns `422 VALIDATION_ERROR` and row count is unchanged.
+    - **Validates: R1.2**
+    - _(satisfies Property 2)_
+  - [x]* 7.14 Property test: exposure dedup invariance
+    - File: `tests/eas/test_exposure_matching.py::test_property_dedup`.
+    - **Property 8: Exposure dedup invariance** — for multisets of identical `(asset_id, record_hash, matched_indicator)` triples, the resulting row count is at most 1.
+    - **Validates: R3.3, R3.5, R27.10**
+    - _(satisfies Property 8)_
+  - [x]* 7.15 Integration test: exposure alerter
+    - File: `tests/eas/test_exposure_alerter.py` asserting that critical exposures POST to `eas-critical` and high exposures to `eas-warning`; asserting per-tenant webhook fan-out when configured; asserting `exposure_alert_deliveries` rows are persisted.
+    - _(satisfies R3.4, R5.1, R5.2, R5.3, Property 9)_
+  - [x]* 7.16 Integration test: exposures endpoint filters and pagination
+    - File: `tests/eas/test_exposures_endpoint.py` seeding exposures and asserting that `severity` and `since` filters subset correctly, and that tenant isolation returns 404 for cross-tenant `asset_id`.
+    - **Validates: R4.2, R4.3, R20.4, Property 5**
+    - _(satisfies R4.1–R4.4, Property 5)_
+
+- [x] 8. Capability 2 — Visual / Screenshot Intelligence
+  - [x] 8.1 Implement `src/hydra/eas/screenshots/ssrf_guard.py`
+    - `is_safe_url(url: str) -> bool` rejecting schemes outside `{http, https}`, private IPs, loopback, link-local, DNS-rebinding via pinned resolution per Design §13.2.
+    - Produces the `--host-resolver-rules` arg for Chromium pinning.
+    - _(satisfies R6.1, Design §13.2)_
+  - [x] 8.2 Implement `src/hydra/eas/screenshots/renderer.py`
+    - Playwright wrapper launching Chromium with `--no-sandbox --disable-dev-shm-usage --disable-gpu` and `--host-resolver-rules` pinning per Design §3.3 / §13.2.
+    - Applies `EASSettings.screenshot.viewport`, `timeout_seconds`, user-agent `HYDRA-Screenshot/1.0`.
+    - Returns `(png_bytes, http_status, title)` or raises timed/navigation/TLS errors.
+    - _(satisfies R6.1, R6.3, Design §3.3)_
+  - [x]* 8.3 Property test for perceptual-hash similarity
+    - File: `tests/eas/test_phash_similarity.py`.
+    - **Property 11: Perceptual-hash similarity well-formedness** — hypothesis-generated 64-bit pairs; `Hamming_Similarity(a,b) ∈ [0,1]`, symmetry, `H(a,a) == 1.0`, and threshold subset monotonicity.
+    - **Validates: R8.1, R27.4**
+    - _(satisfies Property 11)_
+  - [x] 8.4 Implement `src/hydra/eas/screenshots/phash.py`
+    - `compute_phash(png_bytes: bytes) -> str` (16-char hex).
+    - `hamming_similarity(a: str, b: str) -> float` = `1.0 - (popcount(int(a,16) ^ int(b,16)) / 64.0)`.
+    - _(satisfies R6.2, R8.1, Property 11)_
+  - [x]* 8.5 Implement `src/hydra/eas/screenshots/ocr.py`
+    - Lazily import `pytesseract`; guarded on `EASSettings.screenshot.ocr_enabled` (no runtime requirement when disabled per R26.2).
+    - `extract_text(png_bytes: bytes, max_chars: int) -> str` with truncation and OCR excerpt derivation.
+    - _(satisfies R6.5, R26.2)_
+  - [x] 8.6 Implement `src/hydra/eas/screenshots/adapter.py`
+    - `ScreenshotAdapter.render(url)` orchestrating: SSRF guard → backpressure check `BackpressureMonitor.check("minio")` → render → `content_hash = sha256(png)` → `phash` → optional OCR → MinIO put at `hydra-screenshots/{yyyy}/{mm}/{dd}/{sha256(url)}.png` → ES index into `hydra-screenshots` → emit `NormalizedRecord` with `tier=29`, `source_meta.adapter_type="screenshot"`, payload per R6.2 (or `error` per R6.3).
+    - Registered as new `adapter_type="screenshot"` in `SourceMeta.adapter_type` union.
+    - _(satisfies R6.1, R6.2, R6.3, R6.4, R6.5, Property 10)_
+  - [x] 8.7 Implement `src/hydra/eas/screenshots/worker.py`
+    - `ScreenshotWorker` async loop: `BLPOP hydra:eas:screenshot:queue` → acquire per-host semaphore (`hydra:eas:screenshot:sem:{host}` INCR + EXPIRE 30) → delegate to `ScreenshotAdapter.render` → release semaphore.
+    - `concurrency = EASSettings.screenshot.max_concurrency`; per-host limit `EASSettings.screenshot.per_host_concurrency`.
+    - On `BackpressureMonitor.check("minio") == BLOCKED`, re-push URL with 30-second delay.
+    - _(satisfies R6.4, Design §3.3, §6.2)_
+  - [x] 8.8 Implement `src/hydra/eas/routers/images.py`
+    - `GET /api/v1/images/{record_hash}` → streaming `image/png` from MinIO, or `ImageMetadataResponse` when `metadata_only=true`.
+    - `GET /api/v1/images/search` → paged `ImageSearchResult` using ES `script_score` on `phash_bits` with `EASSettings.images_search_max_results` cap.
+    - `POST /api/v1/assets/{asset_id}/screenshot` → 202 `JobStatus`, `expensive` tier, enforces `screenshots_per_day` cost quota; mounted on the assets router or images router per Design §7.1.
+    - 404 `NOT_FOUND` when record missing (R7.3), 503 `BLOB_UNAVAILABLE` when ES has record but MinIO object is missing (R7.4).
+    - _(satisfies R7.1, R7.2, R7.3, R7.4, R8.1, R8.2, R8.3, R8.4, R21.2, R22.1)_
+  - [x]* 8.9 Unit tests for SSRF guard
+    - File: `tests/eas/test_ssrf_guard.py` asserting rejection of private IPs, loopback, link-local, non-http schemes, and DNS-rebinding host-resolver-rules generation.
+    - _(satisfies R6.1, Design §13.2)_
+  - [ ]* 8.10 Integration tests for screenshot capture and determinism
+    - File: `tests/eas/test_screenshots.py` with a mock HTML response asserting **Property 10: Screenshot adapter determinism** — identical `content_hash`, `phash`, `minio_key`, `error` across repeated invocations on the same URL.
+    - **Validates: R6.1, R6.2, R6.3, R6.5**
+    - _(satisfies Property 10)_
+  - [ ]* 8.11 Integration tests for images endpoints
+    - File: `tests/eas/test_images_endpoint.py` asserting the 404 / 503 / 200 matrix for `GET /images/{record_hash}` and `metadata_only=true` behavior.
+    - File: `tests/eas/test_images_search.py` asserting phash similarity ordering, 422 for malformed phash, filter subset preservation (Property 5), and pagination round-trip (Property 6).
+    - _(satisfies R7.1–R7.4, R8.1–R8.4, Property 5, Property 6)_
+
+- [x] 9. Capability 3 — CVE & Exploit Enrichment (TDD for CPEMatcher)
+  - [x]* 9.1 Property test for CVE pipeline determinism (write FIRST, then implementation)
+    - File: `tests/eas/test_cve_pipeline.py::test_property_determinism`.
+    - **Property 17: CVE_Pipeline determinism** — fixed `(CVE records, fingerprint records)` inputs produce identical `CorrelationResult` rows under natural key `(pipeline_id, record_a_hash, record_b_hash)` with identical `confidence`, `evidence`, and field ordering.
+    - **Property 18: CVE_Pipeline confidence formula** — `confidence == min(1.0, 0.5 + 0.1 * cvss_v3_score)`.
+    - **Validates: R10.2, R10.3, R10.5, R27.7**
+    - _(satisfies Property 17, Property 18)_
+  - [x] 9.2 Implement `src/hydra/eas/cves/cpe_matcher.py`
+    - Parse CPE 2.3 strings into `CPEEntry`; implement `cpe_matches(cpe: CPEEntry, fp: FingerprintTriple, mode: str) -> bool` per Design §3.4 pseudo-code (loose/strict modes, vendor/product case-insensitive equality, version range via `packaging.version` in strict mode).
+    - _(satisfies R10.2, Property 17)_
+  - [x] 9.3 Implement `src/hydra/eas/cves/fingerprint.py`
+    - `FingerprintExtractor.extract(record: NormalizedRecord) -> FingerprintTriple | None` driven by `EASSettings.cve_fingerprint_map` keyed by tier.
+    - _(satisfies R10.2)_
+  - [x] 9.4 Implement `src/hydra/eas/cves/severity.py`
+    - `severity_for(cvss_v3_score: float, kev_listed: bool, epss_score: float | None) -> str` per Design §3.4 table (`kev AND cvss>=9.0 → critical`, `kev OR (cvss>=7.0 AND epss>=0.7) → high`, `cvss>=7.0 → medium`, else `low`).
+    - _(satisfies R10.4, Design §3.4)_
+  - [x] 9.5 Implement `src/hydra/eas/cves/repository.py`
+    - ES-backed helpers: `get_cve_detail(cve_id)`, `search_cves(params)`, `search_exploits(params)`.
+    - PG-backed `list_affected_assets(cve_id, tenant_id)` joining `correlation_results` with `asset_exposures` per R11.4.
+    - _(satisfies R11.1, R11.3, R11.4, R11.5)_
+  - [x] 9.6 Implement `src/hydra/eas/cves/pipeline.py`
+    - `CVEPipeline(BasePipeline)` with `pipeline_id = "cve_correlation"`, consuming Tier 29 CVE records and fingerprint-bearing records from tiers 16, 17, 28 per R10.1.
+    - For each matching `(C, R)` pair, write a `CorrelationResult` with deterministic tie-breaking per Design §3.4 (`cvss_v3_score DESC, kev_listed DESC, epss_score DESC, C.raw_hash ASC`), `confidence = min(1.0, 0.5 + 0.1 * cvss_v3_score)`, evidence including `{cpe_match, cvss_v3_score, epss_score?, kev_listed?}`.
+    - Emit exposure events via `AssetMonitor.record_exposure_from_correlation` for asset-related matches (R10.4).
+    - Register the pipeline with `CorrelationEngine` during `setup_eas`.
+    - _(satisfies R10.1, R10.2, R10.3, R10.4, R10.5, Property 17, Property 18)_
+  - [x] 9.7 Implement `src/hydra/eas/routers/cves.py`
+    - `GET /api/v1/cves/{cve_id}` → `CVEDetailResponse`, regex-validated; 422 on bad format.
+    - `GET /api/v1/cves/search` → paged `CVESearchResult` with `vendor, product, min_cvss, kev_only, published_after, published_before` filters.
+    - `GET /api/v1/cves/{cve_id}/affected-assets` → tenant-scoped list of `AssetResponse`.
+    - `POST /api/v1/cves/correlate` → 202 `JobStatus`, `expensive` tier.
+    - _(satisfies R11.1, R11.2, R11.3, R11.4, R11.6, R21.2)_
+  - [x] 9.8 Implement `src/hydra/eas/routers/exploits.py`
+    - `GET /api/v1/exploits/search` → paged `ExploitSearchResult` with `cve_id, platform, type, published_after` filters.
+    - _(satisfies R11.5, R11.6)_
+  - [x]* 9.9 Integration tests for CVEs and exploits endpoints
+    - File: `tests/eas/test_cves_endpoint.py` seeding ES and asserting detail join of NVD+EPSS+KEV, search filter subset preservation (Property 5), and pagination round-trip (Property 6).
+    - File: `tests/eas/test_exploits_endpoint.py` asserting ExploitDB + Metasploit fan-in and filters.
+    - **Validates: R11.1, R11.3, R11.4, R11.5, R27.1**
+    - _(satisfies R11.1–R11.6, Property 5, Property 6)_
+
+- [x] 10. Capability 4 — Geospatial Exploration
+  - [x] 10.1 Implement `src/hydra/eas/maps/h3_cells.py`
+    - `zoom_to_h3_resolution(zoom: int) -> int` and `h3_cell_of(lat, lon, resolution) -> str` per Design §3.5 zoom table.
+    - _(satisfies R13.1, R13.2)_
+  - [x] 10.2 Implement `src/hydra/eas/maps/geohash_cells.py`
+    - `zoom_to_geohash_precision(zoom: int) -> int` and `geohash_of(lat, lon, precision) -> str` per Design §3.5 zoom table.
+    - _(satisfies R13.1, R13.2)_
+  - [x] 10.3 Implement `src/hydra/eas/maps/tile_aggregator.py`
+    - `TileAggregator.cell_of(record, zoom)` dispatching on `EASSettings.maps_aggregation_strategy`.
+    - `aggregate(records, zoom) -> list[TileCellResponse]` computing `(cell_id, centroid, count, tier_breakdown, dominant_tag)`.
+    - Truncation to `maps_tile_max_cells` sorted by count DESC with stable tiebreak on `cell_id ASC`; response `truncated` and `total_cells` meta per R13.4.
+    - _(satisfies R13.1, R13.3, R13.4, Property 12, Property 14)_
+  - [x] 10.4 Implement `src/hydra/eas/maps/repository.py`
+    - `MapsRepository.query_bbox(bbox, filters, limit)` using PostGIS `ST_Intersects(geo, ST_MakeEnvelope(...))` with optional `tier, time_start, time_end, min_confidence, tag` filters per R12.3.
+    - Caps fetch at `LIMIT 100 * maps_tile_max_cells` per Design §6.4.
+    - _(satisfies R12.1, R12.3)_
+  - [x] 10.5 Implement `src/hydra/eas/routers/maps.py`
+    - `GET /api/v1/maps/features` with bbox parsing and 422 validation per R12.2, raw features or aggregated tiles per `zoom`, 413 `BBOX_TOO_BROAD` when over `maps_feature_limit` with no zoom per R12.4.
+    - _(satisfies R12.1, R12.2, R12.3, R12.4, R13.1, R13.4, R21.3)_
+  - [x]* 10.6 Property test: tile count conservation and zoom monotonicity
+    - File: `tests/eas/test_tile_aggregator.py`.
+    - **Property 12: Tile count conservation under aggregation** — `sum(cell.count) == len(records)` up to truncation.
+    - **Property 13: Tile zoom monotonicity** — `precision(z+1) >= precision(z)` and `precision(z+1) - precision(z) ∈ {0, 1}`; increasing zoom does not decrease cell count.
+    - **Property 14: Tile aggregator returns only bbox-contained cells** — every feature centroid inside bbox with non-zero count.
+    - **Validates: R13.2, R13.3, R27.5**
+    - _(satisfies Property 12, Property 13, Property 14)_
+  - [ ]* 10.7 Integration test: maps endpoint
+    - File: `tests/eas/test_maps.py` seeding PostGIS with points and asserting bbox filter, zoom aggregation, 422 on malformed bbox, 413 on over-broad bbox without zoom.
+    - _(satisfies R12.1–R12.4, R13.1, R13.4)_
+
+- [x] 11. Capability 5 — Historical Trends and Jobs progress
+  - [x] 11.1 Implement `src/hydra/eas/trends/buckets.py`
+    - `validate_window(bucket: str, time_start, time_end, trends_max_window_days: int) -> None` applying the §3.6 bucket/window ceilings and `trends_max_window_days`.
+    - Raises `WINDOW_TOO_LARGE` (422) when violated per R14.3, Property 16.
+    - `INVALID_TIME_WINDOW` (422) when `time_start >= time_end` per R14.2.
+    - _(satisfies R14.2, R14.3, Property 16)_
+  - [x] 11.2 Implement `src/hydra/eas/trends/service.py`
+    - `TrendsService.query(request: TrendRequest) -> TrendResponse` with InfluxDB primary path per Design §6.5.
+    - Fallback to PostgreSQL `time_bucket`/`date_trunc` aggregation on `StorageHealth("influxdb").status == UNREACHABLE`, returning `fallback=True` per R14.5.
+    - _(satisfies R14.1, R14.5, Property 15)_
+  - [x] 11.3 Implement `src/hydra/eas/trends/comparison.py`
+    - When `compare_to == "previous_period"`, execute a second shifted query over the immediately preceding window of equal length and compute `delta = current - comparison` per bucket per R14.4.
+    - _(satisfies R14.4, Property 15)_
+  - [x] 11.4 Implement `src/hydra/eas/routers/trends.py`
+    - `GET /api/v1/trends` consuming `TrendRequest`, validating window via `buckets.validate_window` BEFORE hitting storage, applying comparison if requested, and returning `207 Multi-Status` with `meta.fallback=true` on PG fallback per R14.5.
+    - _(satisfies R14.1, R14.2, R14.3, R14.4, R14.5, R21.3)_
+  - [x] 11.5 Extend `src/hydra/api/schemas/common.py::JobStatus`
+    - Add optional fields `progress_current: int | None = None`, `progress_total: int | None = None`, `eta_seconds: float | None = None` per R15.1.
+    - _(satisfies R15.1)_
+  - [x] 11.6 Add `JobManager.update_progress`
+    - In `src/hydra/api/jobs.py`: `update_progress(job_id, current, total)` with monotonicity guard (reject decreases of `progress_current` per Property 19) and compute `eta_seconds = max(0.0, (total - current) * elapsed / max(current, 1))` where `elapsed` is seconds since `created_at` per R15.2 and Design §8.7.
+    - Persist to Redis key `hydra:job:{job_id}` with TTL 3600 per Design §6.8.
+    - _(satisfies R15.1, R15.2, Property 19)_
+  - [x] 11.7 Implement `src/hydra/eas/routers/jobs.py`
+    - `GET /api/v1/jobs/{job_id}/progress` returning `JobProgressResponse` with `progress_ratio = progress_current / progress_total` (or `None`) per R15.3; 404 `JOB_NOT_FOUND` per R15.4.
+    - Preserve backward compatibility with `/api/v1/products/jobs/{job_id}` and `/api/v1/correlations/jobs/{job_id}` by sharing a single `JobManager` instance per R15.5.
+    - _(satisfies R15.3, R15.4, R15.5, R21.3)_
+  - [x]* 11.8 Property test: time-series aggregation correctness
+    - File: `tests/eas/test_trends.py::test_property_aggregation_monotonic`.
+    - **Property 15: Time-series aggregation correctness** — hypothesis-generated raw time-series; assert `sum(sum_per_bucket) == sum(raw)`, `sum(count_per_bucket) == count(raw)`, `min(raw) <= min_per_bucket <= mean_per_bucket <= max_per_bucket <= max(raw)`, `p50 <= p95 <= p99`, and `delta[i] = current[i] - comparison[i]`.
+    - **Validates: R14.1, R14.4, R27.6**
+    - _(satisfies Property 15)_
+  - [x]* 11.9 Property test: job-progress monotonicity
+    - File: `tests/eas/test_jobs_progress.py`.
+    - **Property 19: Job-progress semantics** — sequences of `update_progress` calls keep `progress_current` non-decreasing, `progress_ratio ∈ [0,1]`, and `eta_seconds` satisfies the formula.
+    - **Validates: R15.2, R15.3, R27.9**
+    - _(satisfies Property 19)_
+  - [x]* 11.10 Integration tests: trends endpoint and PG fallback
+    - File: `tests/eas/test_trends.py` asserting primary Influx path, window validation 422 errors (Property 16), and comparison mode shape.
+    - File: `tests/eas/test_trends_fallback.py` forcing `StorageHealth("influxdb")` unreachable and asserting `207 Multi-Status` with `meta.fallback=true`.
+    - _(satisfies R14.1–R14.5, Property 16)_
+  - [x]* 11.11 Integration test: jobs progress endpoint
+    - File: `tests/eas/test_jobs_progress.py` covering 200, 404 `JOB_NOT_FOUND`, and backward compatibility with pre-existing job endpoints.
+    - _(satisfies R15.1, R15.3, R15.4, R15.5)_
+
+- [x] 12. Checkpoint — half-system verification
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 13. Capability 6 — Fast Indicator Lookup
+  - [x] 13.1 Implement `src/hydra/eas/lookup/classifier.py`
+    - `classify_indicator(value: str) -> IndicatorClass | None` returning one of `{"ipv4","ipv6","domain","hostname","hash"}` per R16.1, R16.4.
+    - _(satisfies R16.1, R16.4)_
+  - [x]* 13.2 Property test: indicator normalizer fixpoint
+    - File: `tests/eas/test_lookup_normalizer.py`.
+    - **Property 3: Normalization fixpoint** for indicator classes — `normalize(normalize(x)) == normalize(x)` for every accepted indicator.
+    - **Validates: R16.2, R16.3, R16.4, R27.3**
+    - _(satisfies Property 3)_
+  - [x] 13.3 Implement `src/hydra/eas/lookup/normalizer.py`
+    - `normalize_indicator(cls: IndicatorClass, value: str) -> str`:
+      - `ipv4|ipv6` → `ipaddress.ip_address(value).compressed` per R16.2.
+      - `domain|hostname` → lowercase ASCII with IDNA and single trailing-dot strip per R16.3.
+      - `hash` → lowercase hex 16/32/40/64 chars per R16.4.
+    - _(satisfies R16.2, R16.3, R16.4, Property 3)_
+  - [x] 13.4 Implement `src/hydra/eas/lookup/singleflight.py`
+    - `acquire(key: str, request_id: str, ex: int = 10) -> bool` using `SET NX EX`; `release(key, request_id)` CAS-safe per Design §3.7.
+    - `wait_for_value(cache_key: str, poll_interval_ms: int = 50, timeout_ms: int = 2000)` fallback polling helper.
+    - _(satisfies R17.1, R17.2, Design §3.7)_
+  - [x] 13.5 Implement `src/hydra/eas/lookup/cache.py`
+    - `IndicatorLookupCache` backed by Redis db `EASSettings.lookup_cache_redis_db` (default 3) configured with `maxmemory-policy allkeys-lru` and `maxmemory` sized for `lookup_cache_max_entries`.
+    - `get(cls, value)` returns `CacheEntry | None` decoding msgpack (ormsgpack).
+    - `set(cls, value, payload)` writes with `SETEX` TTL `EASSettings.lookup_cache_ttl_seconds`.
+    - Emits `hydra_eas_lookup_cache_hits_total`, `hydra_eas_lookup_cache_misses_total`, `hydra_eas_lookup_cache_size`.
+    - _(satisfies R17.1, R17.2, R17.3, R17.6, Design §3.7)_
+  - [x] 13.6 Implement `src/hydra/eas/lookup/assembler.py`
+    - `LookupAssembler.assemble(cls, value, tenant_id)` running the parallel fan-out per Design §2.3: PG records+tags, ES `hydra-cves` correlations, ES `hydra-screenshots` by `url_host`; then resolves `asset_reference` tenant-scoped per R17.5.
+    - Builds `LookupResponse` per R17.2.
+    - _(satisfies R17.2, R17.5, Property 21)_
+  - [x] 13.7 Implement `src/hydra/eas/routers/lookup.py`
+    - `GET /api/v1/lookup/{indicator}`: classify → 422 `INDICATOR_NOT_CLASSIFIED` on failure; normalize; enforce `lookup_requests_per_day` cost quota before cache read; cache-first read with single-flight on miss per Design §2.3; set `meta.cache = "hit"|"miss"` per R17.1.
+    - _(satisfies R16.1, R17.1, R17.2, R17.4, R17.5, R21.3, R22.1)_
+  - [x]* 13.8 Property test: lookup tenant isolation
+    - File: `tests/eas/test_lookup_tenant_isolation.py`.
+    - **Property 21: Lookup tenant-isolation invariance** — for any indicator and any two tenants, `records`, `tags`, `cve_correlations`, `screenshots` are byte-equal; only `asset_reference` may differ.
+    - **Validates: R17.5, R27.8**
+    - _(satisfies Property 21)_
+  - [x]* 13.9 Property test: lookup cache idempotency
+    - File: `tests/eas/test_lookup.py::test_property_cache_idempotency`.
+    - **Property 20: Lookup cache idempotency** — repeated requests within TTL return byte-identical bodies except `meta.cache`.
+    - **Validates: R17.1, R17.2**
+    - _(satisfies Property 20)_
+  - [x]* 13.10 Integration tests: lookup cache and single-flight
+    - File: `tests/eas/test_lookup.py` for end-to-end happy path, 422 classification failure, cache hit/miss meta.
+    - File: `tests/eas/test_lookup_cache.py` asserting TTL, LRU eviction, msgpack encoding.
+    - File: `tests/eas/test_lookup_singleflight.py` asserting that N concurrent cache-miss requests only hit the backing stores once.
+    - _(satisfies R17.1–R17.6)_
+
+- [x] 14. Capability 7 — Exposure Observatory
+  - [x] 14.1 Implement `src/hydra/eas/observatory/country.py`
+    - `extract_country_code(record) -> str | None` per Design §3.8 precedence (payload `country_code`, reverse-geocode from `record.geo.coordinates`, payload `country` via `pycountry`, else `None`).
+    - _(satisfies R18.2)_
+  - [x] 14.2 Implement `src/hydra/eas/observatory/posture.py`
+    - `posture_score(inputs, weights) -> float` per Design §3.8 formula, clipped to `[0.0, 100.0]`.
+    - `validate_weights(weights)` called at settings load, asserting sum `1.0 ± 1e-6` per Property 22.
+    - `trend_deltas(current, prior) -> dict` per R18.4.
+    - _(satisfies R18.3, R18.4, Property 22)_
+  - [x] 14.3 Implement `src/hydra/eas/observatory/repository.py`
+    - `ObservatoryRepository.aggregate_by_country(as_of)` executing the aggregation SQL from Design §8.6 joining `normalized_records`, `correlation_results` (pipeline `cve_correlation`), and `asset_exposures`.
+    - `load_prior_day_product(country_code)` for R18.4.
+    - _(satisfies R18.2, R18.4)_
+  - [x] 14.4 Implement `src/hydra/eas/observatory/generator.py`
+    - `ExposureObservatory(BaseProduct)` with `product_type = "exposure_posture_report"`, `source_tiers = [16, 17, 19, 28, 29]` per R18.1.
+    - `generate(parameters)`: aggregate by `country_code`, compute `posture_score` + `trend_deltas`, build `IntelligenceProduct` with sections `{overview, service_exposure_breakdown, vulnerability_density, trend_deltas, top_cves, top_exposed_assets}` per R18.2.
+    - Persist via `AnalysisEngine` (R18.5); when `EASSettings.observatory.publish_snapshot_minio`, also write to `hydra-observatory/{yyyy}/{mm}/{dd}/posture.json` per R18.6.
+    - Register with `AnalysisEngine` during `setup_eas`.
+    - _(satisfies R18.1, R18.2, R18.3, R18.4, R18.5, R18.6, Property 22)_
+  - [x] 14.5 Create `dags/eas_observatory_daily.py`
+    - Daily DAG under the existing P8 DAG factory with cadence tag `daily` and owner `hydra-eas` per R19.1.
+    - On success: emit log `posture_report_generated product_id=<uuid> countries=<n>` and `hydra_eas_observatory_runs_total{status="success"}`.
+    - On failure: emit `hydra_eas_observatory_runs_total{status="failed"}` per R19.3.
+    - _(satisfies R19.1, R19.2, R19.3)_
+  - [x] 14.6 Implement `src/hydra/eas/routers/observatory.py`
+    - `GET /api/v1/observatory/latest` → `ExposurePostureReportResponse` (most recent product).
+    - `GET /api/v1/observatory/countries/{country_code}` → `CountryPostureResponse`; 404 `NOT_FOUND` on unknown code or missing coverage per R19.6.
+    - `POST /api/v1/observatory/generate` → 202 `JobStatus`, `expensive` tier, enforces `observatory_regenerations_per_day` cost quota per R21.2 / R22.1.
+    - _(satisfies R19.4, R19.5, R19.6, R21.2, R22.1)_
+  - [ ]* 14.7 Integration test: observatory generation and retrieval
+    - File: `tests/eas/test_observatory.py` seeding records+exposures+correlations, running `generate`, asserting product persistence and router responses.
+    - _(satisfies R18.1–R18.6, R19.4, R19.5, R19.6)_
+  - [x]* 14.8 Property test: posture score determinism and bounds
+    - File: `tests/eas/test_posture_score.py`.
+    - **Property 22: Posture score well-formedness and determinism** — two invocations on identical inputs produce identical scores; every score ∈ `[0, 100]`; every `absolute_delta` ∈ `[-100, 100]`; weights sum to `1.0 ± 1e-6`.
+    - **Validates: R18.3, R18.4, R19 property**
+    - _(satisfies Property 22)_
+  - [ ]* 14.9 Integration test: observatory DAG
+    - File: `tests/eas/test_observatory_dag.py` asserting the DAG runs successfully under the P8 DAG factory, emits the success log line and metric, and fails gracefully with the failure metric on error.
+    - _(satisfies R19.1, R19.2, R19.3)_
+
+- [x] 15. Cross-cutting cost controls and rate-limit wiring
+  - [x] 15.1 Implement `src/hydra/eas/quota/counter.py`
+    - `CostQuotaCounter.increment_and_check(tenant_id, quota_name, limit)` using the atomic MULTI/INCR+EXPIRE pipeline from Design §3.9; on overage, DECR in the same pipeline and raise `COST_QUOTA_EXCEEDED` (429).
+    - Key format: `hydra:eas:cost:{tenant_id}:{quota_name}:{yyyymmdd}` with TTL 172800 per R22.3.
+    - Update `hydra_eas_quota_usage_ratio{tenant_id, quota_name}` gauge per R22.4.
+    - _(satisfies R22.1, R22.2, R22.3, R22.4, Design §3.9)_
+  - [x] 15.2 Implement `enforce_cost_quota(quota_name)` FastAPI dependency
+    - Reusable `Depends(enforce_cost_quota("..."))` factory consuming `get_current_tenant_id` and `get_cost_quota_counter`; on 429 response, sets `Retry-After` header in seconds to UTC midnight and body names the exhausted quota per R22.2.
+    - _(satisfies R22.1, R22.2)_
+  - [x] 15.3 Extend `RateLimitMiddleware` with the `expensive` tier
+    - In `src/hydra/api/middleware.py`, add `RateTier.EXPENSIVE` enum member (value 4) with default `2 req/min` burst `1` per R21.1.
+    - Token-bucket reuses the existing Redis implementation.
+    - _(satisfies R21.1, R21.4)_
+  - [x] 15.4 Wire endpoint-to-tier mappings for all EAS endpoints
+    - Update the tier lookup table in `RateLimitMiddleware` with the complete mapping from Design §3.9 table: `expensive` for `POST /assets/{id}/screenshot`, `POST /cves/correlate`, `POST /observatory/generate`; `write` for asset CRUD/DELETE; `read` for all other EAS GETs; `search` for `/maps/features` and `/trends`.
+    - _(satisfies R21.2, R21.3, R21.4, Design §3.9)_
+  - [x]* 15.5 Property test: cost-quota enforcement at the boundary
+    - File: `tests/eas/test_cost_quota.py`.
+    - **Property 23: Cost-quota enforcement at the boundary** — the `N`-th request within a UTC day succeeds and the `(N+1)`-th returns `429 COST_QUOTA_EXCEEDED` with `Retry-After`; Redis counter equals successful count.
+    - **Validates: R22.1, R22.2**
+    - _(satisfies Property 23)_
+  - [x]* 15.6 Integration test: expensive-tier rate limiting
+    - File: `tests/eas/test_rate_limit_expensive.py` asserting 2 req/min default for `expensive` endpoints and that `X-RateLimit-*` headers are present and correctly formatted per R21.4.
+    - _(satisfies R21.1, R21.2, R21.4)_
+
+- [x] 16. Cross-cutting observability
+  - [x] 16.1 Implement `src/hydra/eas/metrics.py`
+    - Register Prometheus metrics per Design §11.1 / R23.1: `hydra_eas_exposure_events_total{tenant_id, asset_type, tier, severity}`, `hydra_eas_screenshot_captures_total{status}`, `hydra_eas_cve_records_total{source}`, `hydra_eas_lookup_cache_hits_total`, `hydra_eas_lookup_cache_misses_total`, `hydra_eas_lookup_cache_size`, `hydra_eas_quota_usage_ratio{tenant_id, quota_name}`, `hydra_eas_observatory_runs_total{status}`, `hydra_eas_trends_window_bytes`, `hydra_eas_maps_tiles_returned`, `hydra_eas_asn_lookup_failure_total`, `hydra_eas_exposure_buffer_overflow_total`.
+    - _(satisfies R23.1)_
+  - [x] 16.2 Create `prometheus/rules/hydra_eas_alerts.yml`
+    - Alerts per R23.3 / Design §11.2: `HydraEASCriticalExposure`, `HydraEASScreenshotFailureRate`, `HydraEASLookupCacheHitRateLow`, `HydraEASQuotaNearExhaustion`, `HydraEASObservatoryStale`.
+    - _(satisfies R23.3, R22.4)_
+  - [x] 16.3 Add SLO `eas_lookup_p95_latency`
+    - In `src/hydra/monitoring/slo.py` (create if absent), register the SLO with target `0.99` over 7 days measuring the fraction of `/api/v1/lookup/{indicator}` requests with `http_request_duration_seconds < EASSettings.lookup_p95_latency_ms_target / 1000` per R23.4.
+    - _(satisfies R17.4, R23.4)_
+  - [x] 16.4 Add recording rule `hydra:eas_lookup_fast_ratio_5m`
+    - Append to `prometheus/rules/hydra_recording.yml` (create if absent) a recording rule expressing the 5-minute rolling fraction of lookup requests under the p95 latency target.
+    - _(satisfies R23.4, R17.4)_
+  - [x]* 16.5 Create Grafana dashboard `grafana/dashboards/hydra_eas.json`
+    - Panels per Design §11.4: exposure events per tenant, screenshot capture success rate, CVE record growth, lookup cache hit ratio, quota usage ratio, observatory run success, trends throughput, maps tiles returned.
+    - _(satisfies R23.1)_
+  - [x]* 16.6 Unit test for metrics emission
+    - File: `tests/eas/test_eas_metrics.py` asserting that every component emits its metrics with the documented label sets.
+    - _(satisfies R23.1, Property 9)_
+  - [x]* 16.7 Unit test for alert rule syntax
+    - File: `tests/eas/test_eas_alerts.py` running `promtool check rules` against `hydra_eas_alerts.yml` and the recording rules file.
+    - _(satisfies R23.3)_
+
+- [x] 17. Integration and wiring
+  - [x] 17.1 Implement `src/hydra/eas/setup.py::setup_eas(app, settings)`
+    - Register all nine routers: `assets`, `images`, `cves`, `exploits`, `maps`, `trends`, `jobs`, `lookup`, `observatory`.
+    - Start `ScreenshotWorker` coroutines with concurrency `settings.eas.screenshot.max_concurrency`.
+    - Call `bootstrap_eas_indices(es_client, settings)` to create `hydra-screenshots` and `hydra-cves` indices if absent.
+    - Register `AssetMonitor.on_record_ingested` as a post-insert hook on the `StorageWriter` instance.
+    - Register `CVEPipeline` with `CorrelationEngine` (pipeline #4).
+    - Register `ExposureObservatory` with `AnalysisEngine` (product #4).
+    - Fail fast with a clear log message when a capability is enabled but its external dependency is unavailable per R26.4.
+    - _(satisfies R26.4, Design §16, R3.1, R10.1, R18.1, R24.5)_
+  - [x] 17.2 Wire `setup_eas` into `src/hydra/api/app.py::create_app`
+    - Import and call `setup_eas(app, settings)` after P11 routing wiring and before P12 monitoring middleware per the ordering noted in the task request.
+    - _(satisfies Design §16, R20.2, R21.1)_
+  - [x]* 17.3 Integration test: import-guard fail-fast
+    - File: `tests/eas/test_eas_import_guard.py` asserting that enabling a capability (e.g., `ocr_enabled=True`) without its external dependency (`pytesseract`) causes `setup_eas` to fail fast with a clear error log.
+    - _(satisfies R26.4, R26.2)_
+
+- [ ] 18. End-to-end acceptance tests
+  - [x]* 18.1 Property test: pagination round-trip across all six required endpoints
+    - File: `tests/eas/test_pagination_roundtrip.py` parametrized over `/api/v1/assets`, `/api/v1/assets/{asset_id}/exposures`, `/api/v1/exposures`, `/api/v1/images/search`, `/api/v1/cves/search`, `/api/v1/exploits/search`.
+    - **Property 6: Pagination round-trip invariance** — concatenating follow-cursor pages yields the same multiset as a single unpaginated scan.
+    - **Validates: R4.1, R4.4, R11.3, R11.5, R27.1**
+    - _(satisfies Property 6)_
+  - [ ]* 18.2 Smoke test: exposure → CVE correlation → lookup flow
+    - File: `tests/eas/test_eas_smoke.py` running a scripted flow against a docker-compose test stack: register an asset, ingest a fingerprint-bearing record, ingest a matching NVD CVE, assert an `asset_exposure` is produced and that `GET /api/v1/lookup/{indicator}` returns the CVE in `cve_correlations` and the asset in `asset_reference`.
+    - _(satisfies R3.1–R3.4, R10.1–R10.4, R17.2, R17.5)_
+
+- [x] 19. Final checkpoint
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Notes
+
+- Tasks marked `- [ ]*` are optional sub-tasks (tests, docs, dashboards, and deferrable infrastructure). Core implementation tasks are never marked optional.
+- Every task references specific requirements (`R<num>.<criterion>`) and design properties (`Property N`) for traceability.
+- Checkpoints at tasks 12 and 19 ensure incremental validation.
+- Property-based tests validate universal correctness properties; unit and integration tests validate examples and edge cases.
+- Tasks 9.1 / 9.2 follow a TDD pairing for the CPE matcher: property test first, implementation second.
+- Task 7.2 / 7.3 and 7.4 / 7.5 follow the same TDD pairing for the asset normalizer and matcher.
+- The design used pseudocode only in isolated sections (e.g., CPE match). The ambient implementation language is Python, matching the rest of the HYDRA codebase — no language-selection step is required.

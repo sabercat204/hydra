@@ -1,0 +1,55 @@
+# HYDRA EAS — Alertmanager rules (Design §11.2 / R23.3).
+#
+# Every alert below references a metric registered by
+# ``src/hydra/eas/metrics.py``. The file is intended to be loaded via
+# Prometheus ``rule_files`` globs alongside the recording rules in
+# ``hydra_recording.yml``.
+groups:
+  - name: hydra_eas_critical
+    rules:
+      - alert: HydraEASCriticalExposure
+        expr: increase(hydra_eas_exposure_events_total{severity="critical"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          receiver: eas-critical
+        annotations:
+          summary: "Critical exposure detected for tenant {{ $labels.tenant_id }}"
+          description: "Asset type {{ $labels.asset_type }} on tier {{ $labels.tier }}"
+
+      - alert: HydraEASLookupCacheHitRateLow
+        expr: >
+          rate(hydra_eas_lookup_cache_hits_total[15m])
+          / (rate(hydra_eas_lookup_cache_hits_total[15m]) + rate(hydra_eas_lookup_cache_misses_total[15m]))
+          < 0.5
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "EAS lookup cache hit rate below 50%"
+
+      - alert: HydraEASScreenshotFailureRate
+        expr: >
+          rate(hydra_eas_screenshot_captures_total{status="failed"}[15m])
+          / rate(hydra_eas_screenshot_captures_total[15m]) > 0.3
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Screenshot failure rate > 30%"
+
+      - alert: HydraEASQuotaNearExhaustion
+        expr: hydra_eas_quota_usage_ratio > 0.9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tenant {{ $labels.tenant_id }} near quota for {{ $labels.quota_name }}"
+
+      - alert: HydraEASObservatoryStale
+        expr: time() - hydra_eas_observatory_last_run_timestamp_seconds > 172800
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ExposureObservatory has not produced a report in >48h"
