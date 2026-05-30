@@ -73,3 +73,12 @@ scratch_*.txt
 airflow.cfg
 airflow.db
 logs/
+
+# ---------------------------------------------------------------------------
+# Local-only session artifacts (not for distribution)
+# ---------------------------------------------------------------------------
+HANDOFF.md
+HANDOFF.archive.md
+HANDOFF*.md
+STATE.md
+STATE_AND_NEXT_STEPS.md
