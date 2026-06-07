@@ -1,17 +1,18 @@
 # HYDRA — OSINT Aggregation & Correlation Platform
 
 HYDRA is a modular OSINT data ingestion, correlation, and visualization platform.
-It aggregates 140+ data streams across 28 thematic tiers using 10 adapter types,
-normalizes all records to a universal schema, stores them across 6 storage engines,
-schedules ingestion via cadence-aware pipelines, correlates cross-tier data for
-intelligence products, and exposes the whole thing via a REST API with a full
-Prometheus + Grafana observability stack.
+It aggregates 200+ data streams across 28 thematic tiers, the Tier 29 vulnerability
+substrate, and the Mil-Int public-information surface (tiers 100–107) using 11
+adapter types, normalizes all records to a universal schema, stores them across 6
+storage engines, schedules ingestion via cadence-aware pipelines, correlates
+cross-tier data for intelligence products, and exposes the whole thing via a REST
+API with a full Prometheus + Grafana observability stack.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Sources["140+ Upstream Sources"]
+    subgraph Sources["200+ Upstream Sources"]
         direction TB
         S1["Geophysical · Seismic · Atmospheric"]
         S2["Satellite · Economic · Health"]
@@ -115,11 +116,15 @@ flowchart LR
 
 ### Core Components
 
-- **28 Tiers** — Geophysical, Atmospheric, Space Weather, Satellite Imagery, Economic,
-  Law Enforcement, Public Health, International Orgs, Cyber Threat, Human Rights,
-  Astronomy, Sanctions, and 16 more thematic domains.
-- **10 Adapters** — REST/JSON, FDSN, CKAN, OData, SDMX, TAP/VO, S3 Bulk, Scrape/RSS,
-  AIS/ADS-B, STIX/TAXII.
+- **28 Thematic Tiers** — Geophysical, Atmospheric, Space Weather, Satellite Imagery,
+  Economic, Law Enforcement, Public Health, International Orgs, Cyber Threat, Human
+  Rights, Astronomy, Sanctions, and 16 more domains.
+- **Tier 29 — Vulnerability Intelligence** — NVD CVE, FIRST EPSS, CISA KEV, ExploitDB,
+  Metasploit modules.
+- **Mil-Int Surface (tiers 100–107)** — 60+ public defense / intel document
+  repositories (DTIC, NIST SP 800, DISA STIGs, NATO STO, FOI, NIDS, DRDO, ...).
+- **11 Adapters** — REST/JSON, FDSN, CKAN, OData, SDMX, TAP/VO, S3 Bulk, Scrape/RSS,
+  AIS/ADS-B, STIX/TAXII, doc_repo (document repositories).
 - **6 Storage Engines** — PostgreSQL (primary), InfluxDB (time-series), Elasticsearch
   (full-text), Neo4j (graph), MinIO (blob), Redis (cache/dedup/WAQ).
 - **3 Correlation Pipelines** — Geospatial-Temporal, Entity Network, Threat Convergence.
@@ -246,6 +251,43 @@ flowchart TB
 - **7 warning** (Slack only): adapter failure rate, job failures, API 5xx,
   rate-limit exhaustion, correlation-volume anomaly, confidence drift, capacity low.
 
+## Mil-Int Public Information Surface
+
+`mil_int_public_information` aggregates 60+ public defense, S&T, and national
+security document repositories across 40+ nations. Eight registry tiers map onto
+the LOOM intake spec:
+
+| Tier | Group                        | Cadence    |
+|------|------------------------------|------------|
+| 100  | US Domestic Defense S&T      | weekly     |
+| 101  | Five Eyes Partners           | biweekly   |
+| 102  | NATO & European Allies       | biweekly   |
+| 103  | Nordic Defense Research      | biweekly   |
+| 104  | Asia-Pacific Defense         | monthly    |
+| 105  | Russia / Adversary Monitoring| monthly    |
+| 106  | Regional ME / AF / LATAM     | quarterly  |
+| 107  | Access-Control Reference     | on_change  |
+
+Surface module: `src/hydra/mil_int/` (settings, classification gate, mirror
+dedup, standards xref engine, FastAPI routers). API surface:
+
+```
+/api/v1/mil-int/manifest                  # list every source + access_policy
+/api/v1/mil-int/search                    # full-text + faceted (POST)
+/api/v1/mil-int/standards/xref            # MIL-STD ↔ NIST SP ↔ STANAG ↔ DEF STAN
+/api/v1/mil-int/standards/families        # recognised families
+/api/v1/mil-int/doctrine/sources          # curated Tier 105 stream
+/api/v1/mil-int/compliance/sources        # STIG + NIST SP 800 + NSA CSI overlay
+```
+
+The surface is **UNCLASSIFIED-only** — `hydra.mil_int.classification` rejects
+any record carrying classification markers and increments
+`hydra_mil_int_access_policy_violations_total`. Subscription / restricted /
+archived / monitor-only sources are registered for visibility but never
+auto-fetched (see `specs/mil-int-surface/source_manifest.md`).
+
+See `specs/mil-int-surface/{requirements,design,tasks}.md` for full details.
+
 ## Quick Start
 
 ```bash
@@ -313,6 +355,7 @@ src/hydra/
 ├── correlation/           # Cross-tier correlation (P9)
 ├── analysis/              # Intelligence products (P10)
 ├── api/                   # FastAPI REST API (P11)
+├── mil_int/               # Mil-Int public-information surface (tiers 100-107)
 └── monitoring/            # Observability layer (P12)
     ├── metrics.py         # 62 custom Prometheus metrics
     ├── collectors/        # Background metric collectors

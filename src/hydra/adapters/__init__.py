@@ -2,6 +2,7 @@
 
 from .base import AdapterHealth, BaseAdapter, HealthStatus, RawPayload
 from .ckan import CkanAdapter
+from .doc_repo import DocRepoAdapter
 from .exceptions import (
     AdapterError,
     AdapterRegistryMismatch,
@@ -27,6 +28,7 @@ __all__ = [
     "AisAdsbAdapter",
     "BaseAdapter",
     "CkanAdapter",
+    "DocRepoAdapter",
     "FdsnAdapter",
     "FetchError",
     "HealthStatus",

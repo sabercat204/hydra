@@ -22,7 +22,7 @@ else:
 
 
 class Tier(IntEnum):
-    """28 thematic data tiers."""
+    """Thematic data tiers (1-28), surface tiers (29+), and Mil-Int (100-107)."""
 
     GEOPHYSICAL_SEISMIC = 1
     ATMOSPHERIC_WEATHER = 2
@@ -52,6 +52,17 @@ class Tier(IntEnum):
     GLOBAL_HEALTH_EPI = 26
     ENERGY_INFRASTRUCTURE = 27
     NATIONAL_PORTAL_INDEX = 28
+    VULNERABILITY_INTELLIGENCE = 29
+
+    # Mil-Int public-information surface (100-107)
+    MIL_INT_US_DOMESTIC = 100
+    MIL_INT_FIVE_EYES = 101
+    MIL_INT_NATO_EUROPEAN = 102
+    MIL_INT_NORDIC = 103
+    MIL_INT_ASIA_PACIFIC = 104
+    MIL_INT_RUSSIA_ADVERSARY = 105
+    MIL_INT_REGIONAL = 106
+    MIL_INT_ACCESS_CONTROL = 107
 
 
 class AccessLevel(StrEnum):

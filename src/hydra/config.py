@@ -7,6 +7,8 @@ import yaml
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from hydra.mil_int.settings import MilIntSettings
+
 
 class DatabaseSettings(BaseModel):
     """Connection strings and pool settings for all storage engines."""
@@ -258,6 +260,7 @@ class HydraSettings(BaseSettings):
     analysis: AnalysisSettings = AnalysisSettings()
     api: APISettings = APISettings()
     monitoring: MonitoringSettings = MonitoringSettings()
+    mil_int: MilIntSettings = MilIntSettings()
     stream_registry_path: Path = Path("src/hydra/registry/stream_registry.yaml")
     credential_store_path: Path = Path("config/credentials.yaml")
     data_dir: Path = Path("data")

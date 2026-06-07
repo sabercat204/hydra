@@ -9,13 +9,19 @@ import yaml
 
 @dataclass(frozen=True)
 class StreamSource:
-    """A single data source within a tier."""
+    """A single data source within a tier.
+
+    The optional ``access_policy`` field annotates whether the source is
+    safely ingestable. Defaults to ``"open"`` for backward compatibility
+    with tiers 1-29 whose source lines pre-date the field.
+    """
 
     name: str
     url: str
     format: str
     auth: str
     notes: str
+    access_policy: str = "open"
 
 
 @dataclass(frozen=True)
@@ -65,27 +71,60 @@ class StreamRegistry:
                 result.append((tier.id, src))
         return result
 
+    def get_sources_by_access_policy(
+        self, policy: str
+    ) -> List[Tuple[int, StreamSource]]:
+        """Return all (tier_id, source) pairs whose access_policy matches."""
+        return [
+            (tid, src)
+            for tid, src in self.get_all_sources()
+            if src.access_policy == policy
+        ]
+
+
+_VALID_ACCESS_POLICIES = {
+    "open",
+    "registration",
+    "subscription",
+    "restricted",
+    "archived",
+    "monitor_only",
+}
+
 
 def _parse_source(raw: Any) -> StreamSource:
-    """Parse a source from pipe-delimited string or dict."""
+    """Parse a source from pipe-delimited string or dict.
+
+    Pipe-delimited form is ``name|url|format|auth|notes`` with an optional
+    trailing ``|access_policy`` (used by mil_int tiers 100-107). Missing
+    access_policy defaults to ``open``.
+    """
     if isinstance(raw, str):
         parts = raw.split("|")
         while len(parts) < 5:
             parts.append("")
+        access_policy = parts[5].strip() if len(parts) > 5 and parts[5].strip() else "open"
+        if access_policy not in _VALID_ACCESS_POLICIES:
+            access_policy = "open"
         return StreamSource(
             name=parts[0].strip(),
             url=parts[1].strip(),
             format=parts[2].strip(),
             auth=parts[3].strip(),
             notes=parts[4].strip(),
+            access_policy=access_policy,
         )
     if isinstance(raw, dict):
+        access_policy = str(raw.get("access_policy", "open"))
+        if access_policy not in _VALID_ACCESS_POLICIES:
+            access_policy = "open"
         return StreamSource(
             name=raw.get("name", ""),
             url=raw.get("url", ""),
             format=raw.get("format", ""),
             auth=raw.get("auth", ""),
             notes=raw.get("notes", ""),
+            access_policy=access_policy,
         )
     raise ValueError(f"Cannot parse source: {raw!r}")
 

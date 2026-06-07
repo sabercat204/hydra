@@ -1,0 +1,90 @@
+# Standards cross-reference seed for the mil_int_public_information surface.
+#
+# Each mapping is bidirectional — declared once here, queryable in both
+# directions through hydra.mil_int.xref.resolver.XrefResolver.
+#
+# relationship values:
+#   exact       — the two identifiers cover the same scope.
+#   related     — overlapping scope; refer to both for full coverage.
+#   supersedes  — `from_id` replaces `to_id` (or vice versa, after reverse).
+#   implements  — `from_id` is an implementation guide for `to_id`.
+#
+# Family codes match hydra.mil_int.xref.families.FAMILIES.
+
+mappings:
+  # --- EMC / electromagnetic compatibility ---
+  - from_family: MIL_STD
+    from_id: MIL-STD-461
+    to_family: NIST_SP_800
+    to_id: NIST SP 800-53
+    relationship: related
+    notes: "EMC/EMI requirements partially overlap with SC-40 (Wireless Link Protection) controls."
+
+  # --- cryptographic module validation ---
+  - from_family: FIPS
+    from_id: FIPS 140-3
+    to_family: NIST_SP_800
+    to_id: NIST SP 800-140
+    relationship: implements
+    notes: "SP 800-140 series specifies the testing requirements that implement FIPS 140-3."
+
+  - from_family: FIPS
+    from_id: FIPS 140-2
+    to_family: FIPS
+    to_id: FIPS 140-3
+    relationship: supersedes
+    notes: "FIPS 140-3 superseded FIPS 140-2 (sunset 2026-09-22 for new validations)."
+
+  # --- security control families ---
+  - from_family: NIST_SP_800
+    from_id: NIST SP 800-53
+    to_family: STIG
+    to_id: STIG General Purpose Operating System SRG
+    relationship: implements
+    notes: "STIGs implement NIST SP 800-53 control families CM, AC, AU, IA at the platform level."
+
+  - from_family: NIST_SP_800
+    from_id: NIST SP 800-171
+    to_family: NIST_SP_800
+    to_id: NIST SP 800-53
+    relationship: related
+    notes: "SP 800-171 is the CUI tailoring of selected SP 800-53 moderate-baseline controls."
+
+  # --- cryptographic algorithms ---
+  - from_family: NIST_SP_800
+    from_id: NIST SP 800-90A
+    to_family: FIPS
+    to_id: FIPS 140-3
+    relationship: implements
+    notes: "Approved DRBG constructions used to satisfy FIPS 140-3 random-source requirements."
+
+  # --- NATO STANAGs ↔ NIST / MIL-STD ---
+  - from_family: STANAG
+    from_id: STANAG 4774
+    to_family: NIST_SP_800
+    to_id: NIST SP 800-162
+    relationship: related
+    notes: "Confidentiality metadata bindings (STANAG 4774) overlap with attribute-based access control (NIST SP 800-162)."
+
+  - from_family: STANAG
+    from_id: STANAG 4609
+    to_family: MIL_STD
+    to_id: MIL-STD-2500C
+    relationship: related
+    notes: "STANAG 4609 motion-imagery KLV metadata overlaps with NITF 2.1 (MIL-STD-2500C) for full-motion-video products."
+
+  # --- UK Defence Standard ↔ MIL-STD ---
+  - from_family: DEF_STAN
+    from_id: DEF STAN 00-970
+    to_family: MIL_STD
+    to_id: MIL-STD-810
+    relationship: related
+    notes: "Aircraft environmental design vs DoD environmental engineering considerations and laboratory tests."
+
+  # --- NSA CSI ↔ NIST SP 800 ---
+  - from_family: NSA_CSI
+    from_id: CSI-2022-002
+    to_family: NIST_SP_800
+    to_id: NIST SP 800-207
+    relationship: implements
+    notes: "Zero-trust architecture guidance (NSA CSI) implements SP 800-207 ZTA reference."

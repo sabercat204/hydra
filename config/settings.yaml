@@ -31,5 +31,15 @@ api:
     - "http://localhost:3000"
     - "http://localhost:8000"
 
+mil_int:
+  enforce_classification_gate: true
+  download_blobs: false
+  blob_byte_limit: 26214400  # 25 MiB
+  xref_seed_path: "config/mil_int_xref.yaml"
+  manifest_path: "specs/mil-int-surface/source_manifest.md"
+  search_index_name: "hydra-mil-int-records"
+  doctrine_feed_lookback_days: 180
+  compliance_families: ["STIG", "NIST_SP_800", "NSA_CSI"]
+
 stream_registry_path: "src/hydra/registry/stream_registry.yaml"
 credential_store_path: "config/credentials.yaml"

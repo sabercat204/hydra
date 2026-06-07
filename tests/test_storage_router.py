@@ -330,6 +330,51 @@ def test_route_result_aggregates():
 
 
 @pytest.mark.asyncio
+async def test_mil_int_content_tier_routes_to_pg_minio_es():
+    """Mil-Int content tiers (100-106) route to postgres + minio + elasticsearch."""
+    redis = _make_redis()
+    tier = StreamTier(
+        id=100, name="Mil-Int US", streams=1, access="open",
+        formats=["pdf"], cadence="weekly", adapter="doc_repo",
+        fallback="rest_json", sources=[],
+        storage={"storage_engines": ["postgres", "minio", "elasticsearch"]},
+    )
+    registry = StreamRegistry(tiers={100: tier})
+    router = StorageRouter(redis, registry, HydraSettings())
+
+    record = _make_record(
+        tier=Tier.MIL_INT_US_DOMESTIC,
+        payload={"doc_url": "https://x/y.pdf", "title": "doc"},
+        raw_hash=compute_raw_hash(b"mil-int-100"),
+    )
+    result = await router.route([record])
+    assert result.routed == 1
+    assert set(result.engine_counts) == {"postgres", "minio", "elasticsearch"}
+
+
+@pytest.mark.asyncio
+async def test_mil_int_reference_tier_routes_to_postgres_only():
+    """Tier 107 (access-control reference) routes to postgres only."""
+    redis = _make_redis()
+    tier = StreamTier(
+        id=107, name="Mil-Int Access Control", streams=1, access="open",
+        formats=["html"], cadence="on_change", adapter="rest_json",
+        fallback=None, sources=[],
+        storage={"storage_engines": ["postgres"]},
+    )
+    registry = StreamRegistry(tiers={107: tier})
+    router = StorageRouter(redis, registry, HydraSettings())
+
+    record = _make_record(
+        tier=Tier.MIL_INT_ACCESS_CONTROL,
+        raw_hash=compute_raw_hash(b"mil-int-107"),
+    )
+    result = await router.route([record])
+    assert result.routed == 1
+    assert set(result.engine_counts) == {"postgres"}
+
+
+@pytest.mark.asyncio
 async def test_concurrent_route_calls():
     """Concurrent route calls do not corrupt shared state."""
     import asyncio

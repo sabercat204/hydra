@@ -158,6 +158,12 @@ def create_app(
     for router in all_routers:
         app.include_router(router, prefix=prefix)
 
+    # Mil-Int surface routers (their paths already include the /api/v1
+    # prefix, so we mount them with an empty prefix — same pattern as EAS).
+    from hydra.mil_int.setup import mount_mil_int_routers
+
+    mount_mil_int_routers(app)
+
     # Exception handlers
     app.add_exception_handler(HydraAPIException, hydra_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, validation_handler)  # type: ignore[arg-type]

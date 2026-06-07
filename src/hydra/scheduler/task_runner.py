@@ -87,6 +87,7 @@ _ADAPTER_TYPE_MAP: dict[str, str] = {
     "scrape_rss": "hydra.adapters.scrape_rss.ScrapeRssAdapter",
     "ais_adsb": "hydra.adapters.ais_adsb.AisAdsbAdapter",
     "stix_taxii": "hydra.adapters.stix_taxii.StixTaxiiAdapter",
+    "doc_repo": "hydra.adapters.doc_repo.DocRepoAdapter",
 }
 
 # Dead stream tracking Redis key pattern

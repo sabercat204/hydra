@@ -66,6 +66,27 @@ CADENCE_CONFIG: dict[str, dict[str, Any]] = {
         "execution_timeout": timedelta(hours=4),
         "max_active_runs": 1,
     },
+    "biweekly": {
+        # Airflow uses standard cron — every 14 days, anchored on day 1 & 15
+        "schedule": "0 6 1,15 * *",
+        "sla": timedelta(hours=48),
+        "execution_timeout": timedelta(hours=4),
+        "max_active_runs": 1,
+    },
+    "quarterly": {
+        # First day of Jan / Apr / Jul / Oct at 06:00 UTC
+        "schedule": "0 6 1 1,4,7,10 *",
+        "sla": timedelta(days=2),
+        "execution_timeout": timedelta(hours=8),
+        "max_active_runs": 1,
+    },
+    "on_change": {
+        # No scheduled trigger — DAG runs on manual / API trigger only.
+        "schedule": None,
+        "sla": None,
+        "execution_timeout": timedelta(hours=2),
+        "max_active_runs": 1,
+    },
     "monthly_plus": {
         "schedule": "@monthly",
         "sla": timedelta(hours=72),

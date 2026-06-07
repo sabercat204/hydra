@@ -61,7 +61,14 @@ class TestTierEnum:
     """Tier enum validation."""
 
     def test_valid_tier_values(self):
-        for i in range(1, 29):
+        # Thematic tiers 1-28 plus the Tier 29 vulnerability substrate.
+        for i in range(1, 30):
+            rec = _make_record(tier=i)
+            assert rec.tier == i
+
+    def test_valid_mil_int_tier_values(self):
+        # Mil-Int surface tiers (100-107).
+        for i in range(100, 108):
             rec = _make_record(tier=i)
             assert rec.tier == i
 
@@ -69,9 +76,10 @@ class TestTierEnum:
         with pytest.raises(ValidationError):
             _make_record(tier=0)
 
-    def test_invalid_tier_29(self):
+    def test_invalid_tier_99_in_gap(self):
+        # 99 sits in the gap between thematic (1-29) and mil_int (100+).
         with pytest.raises(ValidationError):
-            _make_record(tier=29)
+            _make_record(tier=99)
 
     def test_invalid_tier_negative(self):
         with pytest.raises(ValidationError):

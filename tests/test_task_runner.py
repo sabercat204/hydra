@@ -265,12 +265,13 @@ class TestTaskRunner:
         assert "Concurrency timeout" in result.error
 
     def test_adapter_resolution(self):
-        """All 10 adapter types resolve to correct classes."""
+        """All adapter types resolve to correct classes (10 core + doc_repo)."""
         from hydra.scheduler.task_runner import _ADAPTER_TYPE_MAP
 
         expected_types = {
             "rest_json", "fdsn", "ckan", "odata", "sdmx",
             "tap_vo", "s3_bulk", "scrape_rss", "ais_adsb", "stix_taxii",
+            "doc_repo",
         }
         assert set(_ADAPTER_TYPE_MAP.keys()) == expected_types
 

@@ -49,6 +49,11 @@ adapters:
     coverage: "Cyber threat intelligence"
     tiers: [16]
     auth: [none, api_key, basic_auth, certificate]
+  - id: doc_repo
+    type: doc_repo
+    coverage: "Document repositories: PDFs, technical standards, research papers"
+    tiers: [100, 101, 102, 103, 104, 105, 106]
+    auth: [none, api_key, basic_auth, cookie_auth]
 
 auth_patterns:
   - id: A
@@ -109,8 +114,20 @@ scheduler:
     tiers: [4, 5, 6, 7, 9, 19, 20, 25, 26, 27]
     strategy: "sequential per tier"
   - cadence: weekly
-    tiers: [8, 10, 11, 12, 15, 21]
+    tiers: [8, 10, 11, 12, 15, 21, 100]
     strategy: "sequential per tier"
+  - cadence: biweekly
+    tiers: [101, 102, 103]
+    strategy: "sequential per tier"
+  - cadence: monthly
+    tiers: [104, 105]
+    strategy: "sequential per tier"
+  - cadence: quarterly
+    tiers: [106]
+    strategy: "sequential per tier"
+  - cadence: on_change
+    tiers: [107]
+    strategy: "manual or webhook-triggered"
 
 correlation_pipelines:
   - name: geospatial_temporal
@@ -733,3 +750,175 @@ tiers:
       - "World Bank Data|https://data.worldbank.org/|JSON,CSV|none|World Bank open data"
       - "WHO Data|https://www.who.int/data/|JSON|none|World Health Organization"
       - "WTO Data|https://data.wto.org/|JSON|none|World Trade Organization"
+
+  # ---------------------------------------------------------------------------
+  # mil_int_public_information surface (tiers 100-107)
+  # 64+ public military / defense / national-security repositories.
+  # UNCLASSIFIED only. Source lines carry an extra trailing field:
+  #   name|url|format|auth|notes|access_policy
+  # access_policy: open | registration | subscription | restricted | archived | monitor_only
+  # ---------------------------------------------------------------------------
+
+  - id: 100
+    name: "Mil-Int US Domestic Defense S&T"
+    streams: 11
+    access: "11G"
+    formats: "PDF, HTML, XML, JSON"
+    cadence: weekly
+    adapter: doc_repo
+    fallback: rest_json
+    storage:
+      storage_engines: [postgres, minio, elasticsearch]
+      minio_bucket: hydra-mil-int-100
+    sources:
+      - "DTIC R&E Gateway|https://discover.dtic.mil/|PDF,HTML|none|S&T reports, project summaries, journal articles, budget exhibits, grant awards|open"
+      - "DLA ASSIST|https://assist.dla.mil/|PDF,HTML|none|Authoritative military standards and specifications|registration"
+      - "EverySpec|http://everyspec.com/|PDF|none|MIL-STD, MIL-PRF, MIL-DTL, FED, CID, JANS, MS, USAF, DID, UCF, FIPS|open"
+      - "DISA STIG Library|https://public.cyber.mil/stigs/|XML,ZIP|none|Security Technical Implementation Guides|open"
+      - "MIL-STD Series|http://everyspec.com/MIL-STD/|PDF|none|EMC, cryptographic boundaries, environmental testing, human factors|open"
+      - "MIL-HDBK Series|http://everyspec.com/MIL-HDBK/|PDF|none|Grounding/bonding/shielding, reliability prediction, design handbooks|open"
+      - "NTIS|https://ntis.gov/|PDF,HTML|none|Declassified/unclassified technical reports, federally funded research|open"
+      - "FAS|https://fas.org/issues/|PDF,HTML|none|Mirrors of declassified intelligence documents, nuclear/WMD data, policy analysis|open"
+      - "NSA Public Guidance|https://www.nsa.gov/cybersecurity-guidance/|PDF,HTML|none|Configuration guidance, hardening specs, CSI publications, IAD documents|open"
+      - "NIST SP 800 Series|https://csrc.nist.gov/publications/sp800|PDF,HTML|none|Cybersecurity framework library, risk management, cryptographic standards|open"
+      - "NGA Open Geospatial|https://www.nga.mil/resources/|PDF,HTML|none|Declassified terrain analysis, infrastructure mapping methodologies|open"
+
+  - id: 101
+    name: "Mil-Int Five Eyes Partners"
+    streams: 5
+    access: "4G/1R"
+    formats: "PDF, HTML"
+    cadence: biweekly
+    adapter: doc_repo
+    fallback: rest_json
+    storage:
+      storage_engines: [postgres, minio, elasticsearch]
+      minio_bucket: hydra-mil-int-101
+    sources:
+      - "UK DSTL|https://www.gov.uk/guidance/access-defence-science-and-technology-research|PDF,HTML|none|Defence S&T research via academic channels|open"
+      - "Australia DSTG|https://www.dst.defence.gov.au/publications|PDF|none|Scientific publications, domain S&T strategies|open"
+      - "TTCP|https://www.dst.defence.gov.au/partnership/technical-cooperation-program|PDF|none|Collaborative defense research|restricted"
+      - "Canada DRDC|https://pubs.drdc-rddc.gc.ca/pubdocs/pcow2_e.html|PDF|none|S&T reports, peer-reviewed articles|registration"
+      - "NZ Ministry of Defence|https://defence.govt.nz|PDF|none|Defence policy documents|open"
+
+  - id: 102
+    name: "Mil-Int NATO & European Allies"
+    streams: 8
+    access: "7G/1R"
+    formats: "PDF, HTML"
+    cadence: biweekly
+    adapter: doc_repo
+    fallback: rest_json
+    storage:
+      storage_engines: [postgres, minio, elasticsearch]
+      minio_bucket: hydra-mil-int-102
+    sources:
+      - "NATO STO Publications|https://www.sto.nato.int/|PDF|none|Collaborative S&T reports|open"
+      - "NATO CMRE Open Library|https://openlibrary.cmre.nato.int/|PDF|none|Maritime research since 1959|open"
+      - "NATO Archives Online|https://archives.nato.int/|PDF,HTML|none|Declassified formal documents|open"
+      - "France ONERA HAL|https://onera.hal.science/|PDF|none|Aerospace/defense research|open"
+      - "Germany Fraunhofer Publica|https://publica.fraunhofer.de/|PDF|none|100K+ applied research titles|open"
+      - "Netherlands TNO|https://repository.tno.nl/|PDF|none|Defence/security publications|open"
+      - "Spain INTA|https://www.inta.es/|PDF|none|Aerospace, hydrodynamics, defense tech|restricted"
+      - "Turkey SSB|https://www.ssb.gov.tr/|PDF,HTML|none|Procurement, defence projects|restricted"
+
+  - id: 103
+    name: "Mil-Int Nordic Defense Research"
+    streams: 7
+    access: "6G/1R"
+    formats: "PDF, HTML"
+    cadence: biweekly
+    adapter: doc_repo
+    fallback: rest_json
+    storage:
+      storage_engines: [postgres, minio, elasticsearch]
+      minio_bucket: hydra-mil-int-103
+    sources:
+      - "Sweden FOI|https://foi.se/en/foi/reports/|PDF|none|Defence research, full text from 2001+|open"
+      - "Norway FFI|https://www.ffi.no/en/publications-archive|PDF|none|Defence R&D|open"
+      - "Norway NVA|https://www.forsvaret.no/en/research/publications|PDF|none|Academic military research|open"
+      - "Finland FDRA|https://puolustusvoimat.fi/en/about-us/finnish-defence-research-agency|PDF,HTML|none|Defence R&D|restricted"
+      - "Finland VTT|https://cris.vtt.fi|PDF|none|Defence technology|open"
+      - "Finland NDU|https://maanpuolustuskorkeakoulu.fi/en/finnish-defence-studies-en|PDF|none|Peer-reviewed defence studies|open"
+      - "Denmark FAK|https://fak.dk/|PDF,HTML|none|Military research|restricted"
+
+  - id: 104
+    name: "Mil-Int Asia-Pacific Defense"
+    streams: 8
+    access: "5G/2S/1R"
+    formats: "PDF, HTML"
+    cadence: monthly
+    adapter: doc_repo
+    fallback: rest_json
+    storage:
+      storage_engines: [postgres, minio, elasticsearch]
+      minio_bucket: hydra-mil-int-104
+    sources:
+      - "Japan NIDS|https://www.nids.mod.go.jp/english/publication/|PDF|none|Security & Strategy, China Security Report|open"
+      - "Japan ATLA|https://www.mod.go.jp/atla/en/|PDF,HTML|none|Defence Technology Guideline, R&D|open"
+      - "South Korea KIDA/KJDA|https://www.tandfonline.com/journals/rkjd20|PDF|none|Korean Journal of Defense Analysis (Taylor & Francis)|subscription"
+      - "South Korea ADD|https://www.add.re.kr/|PDF,HTML|none|Agency for Defense Development|restricted"
+      - "India DRDO/DESIDOC|https://publications.drdo.gov.in/ojs/|PDF|none|Defence Science Journal, monographs|open"
+      - "India MP-IDSA|https://idsa.in/journal/journal-of-defence-studies|PDF|none|Journal of Defence Studies|open"
+      - "China CNKI|https://en.cnki.com.cn/|PDF,HTML|none|Academic defense papers - foreign access terminated 2023-03|monitor_only"
+      - "Israel INSS|https://www.inss.org.il/research-2/|PDF|none|Strategic Assessment, policy papers|open"
+
+  - id: 105
+    name: "Mil-Int Russia / Adversary Monitoring"
+    streams: 5
+    access: "3G/1S/1A"
+    formats: "PDF, HTML"
+    cadence: monthly
+    adapter: doc_repo
+    fallback: rest_json
+    storage:
+      storage_engines: [postgres, minio, elasticsearch]
+      minio_bucket: hydra-mil-int-105
+    sources:
+      - "Russia MoD English|https://eng.mil.ru/|HTML,PDF|none|Force structure, operational updates|open"
+      - "Russia Matters Harvard|https://www.russiamatters.org/strategic-documents|PDF,HTML|none|Military Doctrine, NSS, FPC translations|open"
+      - "FAS Nuclear Info Russia|https://nuke.fas.org/guide/russia/doctrine/|PDF,HTML|none|Full-text military doctrine translations|open"
+      - "CAST Moscow Defense Brief|https://web.archive.org/web/2018/http://mdb.cast.ru/|PDF|none|English-language defense analysis 2004-2018|archived"
+      - "East View UDB-MIL|http://www.eastview.com/|PDF|none|Russian military/security periodicals|subscription"
+
+  - id: 106
+    name: "Mil-Int Regional ME / Africa / LATAM"
+    streams: 14
+    access: "12G/2R"
+    formats: "PDF, HTML"
+    cadence: quarterly
+    adapter: doc_repo
+    fallback: rest_json
+    storage:
+      storage_engines: [postgres, minio, elasticsearch]
+      minio_bucket: hydra-mil-int-106
+    sources:
+      - "Saudi Arabia GAMI|https://www.gami.gov.sa/en/|PDF,HTML|none|Defense industry regulations|open"
+      - "UAE EDGE Group|https://edgegroupuae.com/|PDF,HTML|none|Defense industry capabilities|open"
+      - "Iran MODAFL|https://mod.ir/|HTML|none|Minimal content|restricted"
+      - "South Africa DoD|https://www.dod.mil.za/|PDF|none|Annual reports, defense reviews|open"
+      - "South Africa Armscor|https://www.armscor.co.za/|PDF,HTML|none|Procurement, acquisition data|open"
+      - "DefenceWeb Africa|https://defenceweb.co.za/category/repository/|PDF,HTML|none|African defense force fact files|open"
+      - "Nigeria MoD|https://defence.gov.ng/|HTML|none|Policy statements|restricted"
+      - "Kenya MoD|https://www.mod.go.ke/news/|HTML|none|News/policy|open"
+      - "Brazil Defence|https://www.gov.br/defesa|PDF|none|PND, END, LBDN|open"
+      - "Argentina Defence|https://www.argentina.gob.ar/defensa|PDF|none|White papers|open"
+      - "Chile Libro de la Defensa|https://www.defensa.cl/|PDF|none|Defense White Paper|open"
+      - "Colombia MinDefensa|https://www.mindefensa.gov.co/|PDF|none|National defense strategies|open"
+      - "RESDAL Atlas|https://www.resdal.org/ing/defensa.html|PDF,HTML|none|Comparative Latin American defence|open"
+      - "Pakistan ISPR|https://www.ispr.gov.pk/|HTML|none|Military news/PR only|open"
+
+  - id: 107
+    name: "Mil-Int Access Control & Classification References"
+    streams: 3
+    access: "3G"
+    formats: "HTML, PDF"
+    cadence: on_change
+    adapter: rest_json
+    fallback: null
+    storage:
+      storage_engines: [postgres]
+    sources:
+      - "NATO CUI Registry|https://archives.gov/cui/registry/category-detail/nato-restricted.html|HTML|none|Classification boundary guidance|open"
+      - "ITAR Reference|https://sgp.fas.org/library/ipshbook/Chap_02.html|HTML|none|Export control boundary reference|open"
+      - "DTIC Distribution Codes|https://discover.dtic.mil/distribution-statements/|HTML,PDF|none|DTIC distribution-statement taxonomy|open"
