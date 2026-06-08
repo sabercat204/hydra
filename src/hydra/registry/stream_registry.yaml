@@ -419,8 +419,8 @@ tiers:
 
   - id: 15
     name: "Conflict & Event Data"
-    streams: 4
-    access: "3G/1B"
+    streams: 3
+    access: "3G"
     formats: "JSON, CSV"
     cadence: weekly
     adapter: rest_json
@@ -449,8 +449,13 @@ tiers:
             edge_properties:
               - role
               - side
+    # ACLED (formerly listed here) was removed 2026-06-07 to close the
+    # deletion-of-record gap documented in STATE.md G1. ACLED's terms require
+    # downstream caches to honour event retractions; HYDRA has no deletion
+    # subscriber, and razorrooster's handler covers conflict events well
+    # enough for the workspace's needs. Re-add only after wiring a deletion
+    # path. See WORKSPACE_LICENSES.md for posture details.
     sources:
-      - "ACLED|https://acleddata.com/|JSON,CSV|api_key|Armed Conflict Location & Event Data"
       - "GDELT|https://api.gdeltproject.org/|JSON,CSV|none|Global Database of Events Language and Tone"
       - "UCDP|https://ucdpapi.pcr.uu.se/api/|JSON|none|Uppsala Conflict Data Program"
       - "ICG CrisisWatch|https://www.crisisgroup.org/crisiswatch|JSON|none|International Crisis Group"
