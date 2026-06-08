@@ -269,7 +269,8 @@ the LOOM intake spec:
 | 107  | Access-Control Reference     | on_change  |
 
 Surface module: `src/hydra/mil_int/` (settings, classification gate, mirror
-dedup, standards xref engine, FastAPI routers). API surface:
+dedup, standards xref engine, pluggable search backends, FastAPI routers).
+API surface:
 
 ```
 /api/v1/mil-int/manifest                  # list every source + access_policy

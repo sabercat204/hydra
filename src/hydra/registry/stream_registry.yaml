@@ -774,6 +774,7 @@ tiers:
     fallback: rest_json
     storage:
       storage_engines: [postgres, minio, elasticsearch]
+      es_index_prefix: hydra-mil-int
       minio_bucket: hydra-mil-int-100
     sources:
       - "DTIC R&E Gateway|https://discover.dtic.mil/|PDF,HTML|none|S&T reports, project summaries, journal articles, budget exhibits, grant awards|open"
@@ -798,6 +799,7 @@ tiers:
     fallback: rest_json
     storage:
       storage_engines: [postgres, minio, elasticsearch]
+      es_index_prefix: hydra-mil-int
       minio_bucket: hydra-mil-int-101
     sources:
       - "UK DSTL|https://www.gov.uk/guidance/access-defence-science-and-technology-research|PDF,HTML|none|Defence S&T research via academic channels|open"
@@ -816,6 +818,7 @@ tiers:
     fallback: rest_json
     storage:
       storage_engines: [postgres, minio, elasticsearch]
+      es_index_prefix: hydra-mil-int
       minio_bucket: hydra-mil-int-102
     sources:
       - "NATO STO Publications|https://www.sto.nato.int/|PDF|none|Collaborative S&T reports|open"
@@ -837,6 +840,7 @@ tiers:
     fallback: rest_json
     storage:
       storage_engines: [postgres, minio, elasticsearch]
+      es_index_prefix: hydra-mil-int
       minio_bucket: hydra-mil-int-103
     sources:
       - "Sweden FOI|https://foi.se/en/foi/reports/|PDF|none|Defence research, full text from 2001+|open"
@@ -857,6 +861,7 @@ tiers:
     fallback: rest_json
     storage:
       storage_engines: [postgres, minio, elasticsearch]
+      es_index_prefix: hydra-mil-int
       minio_bucket: hydra-mil-int-104
     sources:
       - "Japan NIDS|https://www.nids.mod.go.jp/english/publication/|PDF|none|Security & Strategy, China Security Report|open"
@@ -878,6 +883,7 @@ tiers:
     fallback: rest_json
     storage:
       storage_engines: [postgres, minio, elasticsearch]
+      es_index_prefix: hydra-mil-int
       minio_bucket: hydra-mil-int-105
     sources:
       - "Russia MoD English|https://eng.mil.ru/|HTML,PDF|none|Force structure, operational updates|open"
@@ -896,6 +902,7 @@ tiers:
     fallback: rest_json
     storage:
       storage_engines: [postgres, minio, elasticsearch]
+      es_index_prefix: hydra-mil-int
       minio_bucket: hydra-mil-int-106
     sources:
       - "Saudi Arabia GAMI|https://www.gami.gov.sa/en/|PDF,HTML|none|Defense industry regulations|open"

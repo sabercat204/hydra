@@ -14,6 +14,7 @@
 | 10 | Add `config/mil_int_xref.yaml` seed and `mil_int.*` defaults to `config/settings.yaml`. | ✅ |
 | 11 | Author `specs/mil-int-surface/{requirements,design,tasks,source_manifest}.md` and update `README.md`. | ✅ |
 | 12 | Tests: `test_doc_repo_adapter.py`, `test_mil_int_classification.py`, `test_mil_int_xref.py`, `test_mil_int_dedup.py`, `test_mil_int_routers.py`; extend `test_registry.py` and `test_storage_router.py`. | ✅ |
+| 13 | Search backends: `mil_int/search/{backend,memory,elasticsearch}.py`. Set `es_index_prefix: hydra-mil-int` on tiers 100-106 so docs land in a unified `hydra-mil-int-*` index pattern. Tests in `test_mil_int_search.py`. | ✅ |
 
 ## Verification
 
@@ -21,4 +22,5 @@
 2. `pytest tests/test_registry.py tests/test_storage_router.py tests/test_mil_int_*.py tests/test_doc_repo_adapter.py -v`
 3. `curl http://localhost:8000/api/v1/mil-int/manifest` after `docker-compose up -d`.
 4. `curl 'http://localhost:8000/api/v1/mil-int/standards/xref?from_id=MIL-STD-461'` returns the seeded NIST SP 800-53 mapping.
-5. `ruff check src/hydra/mil_int src/hydra/adapters/doc_repo.py tests/test_mil_int_*.py`.
+5. `curl -X POST http://localhost:8000/api/v1/mil-int/search -H 'content-type: application/json' -d '{"q":"cryptographic"}'` once `setup_mil_int(es_client=...)` has been called from a deployment bootstrap.
+6. `ruff check src/hydra/mil_int src/hydra/adapters/doc_repo.py tests/test_mil_int_*.py`.

@@ -29,8 +29,17 @@ def set_mil_int_components(
     settings: HydraSettings | None = None,
     xref_resolver: XrefResolver | None = None,
     search_backend: Any | None = None,
+    reset: bool = False,
 ) -> None:
-    """Install runtime singletons. Only non-None args overwrite state."""
+    """Install runtime singletons.
+
+    Only non-None args overwrite state. ``reset=True`` clears every
+    singleton first; useful for test fixtures that want a known starting
+    point regardless of what an earlier test left behind.
+    """
+    if reset:
+        for key in list(_state.keys()):
+            _state[key] = None
     if settings is not None:
         _state["settings"] = settings
     if xref_resolver is not None:

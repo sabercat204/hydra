@@ -21,6 +21,7 @@ def client() -> TestClient:
     app = FastAPI()
     mount_mil_int_routers(app)
     set_mil_int_components(
+        reset=True,
         xref_resolver=XrefResolver.from_path("config/mil_int_xref.yaml"),
     )
     return TestClient(app)

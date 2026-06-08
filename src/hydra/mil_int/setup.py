@@ -36,13 +36,16 @@ async def setup_mil_int(
     settings: "HydraSettings",
     *,
     search_backend: Any | None = None,
+    es_client: Any | None = None,
 ) -> None:
     """Wire the mil_int subsystem.
 
     1. Mount routers (idempotent).
     2. Build / cache the standards xref resolver from the seed file.
-    3. Register the search backend when supplied — endpoints return 503
-       until one is.
+    3. Register the search backend. If ``search_backend`` is supplied
+       it's used directly; otherwise an ``es_client`` is wrapped in
+       :class:`ElasticsearchSearchBackend`. Without either, the search
+       endpoint returns 503 until configured.
     """
     if not _routers_already_mounted(app):
         mount_mil_int_routers(app)
@@ -51,14 +54,25 @@ async def setup_mil_int(
     from hydra.mil_int.xref.resolver import XrefResolver
 
     resolver = XrefResolver.from_path(settings.mil_int.xref_seed_path)
+
+    backend = search_backend
+    if backend is None and es_client is not None:
+        from hydra.mil_int.search.elasticsearch import ElasticsearchSearchBackend
+
+        backend = ElasticsearchSearchBackend(es_client)
+
     set_mil_int_components(
         settings=settings,
         xref_resolver=resolver,
-        search_backend=search_backend,
+        search_backend=backend,
     )
     logger.info(
         "mil_int.setup.complete",
-        extra={"xref_size": resolver.size, "search_backend": search_backend is not None},
+        extra={
+            "xref_size": resolver.size,
+            "search_backend": backend is not None,
+            "search_backend_kind": type(backend).__name__ if backend else None,
+        },
     )
 
 

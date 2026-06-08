@@ -110,9 +110,27 @@ appear at app-construction time. Deployment bootstrap calls
 runtime singletons. The xref resolver lazy-loads on first dependency
 access if `setup_mil_int` hasn't run.
 
-## §10 Out of scope (future)
+## §10 Search backends
+
+Two implementations live under `src/hydra/mil_int/search/`:
+
+- `InMemorySearchBackend` — list-of-records, O(n) per query, used by
+  tests and dev environments without an Elasticsearch cluster.
+- `ElasticsearchSearchBackend` — wraps an `AsyncElasticsearch` client.
+  Translates `SearchRequest` into a bool query with `multi_match` over
+  `payload.title^3 / payload.abstract^2 / payload.keywords / tags`,
+  `terms` filters per dimension, a `range` filter on
+  `payload.freshness_score`, and `terms` aggs for facets. Defaults to
+  the index pattern `hydra-mil-int-*` (set as `es_index_prefix:
+  hydra-mil-int` on tiers 100-106 in the registry).
+
+Wiring: `setup_mil_int(app, settings, search_backend=..., es_client=...)`
+takes either a fully-built backend or an ES client and lifts it into the
+backend wrapper. Without either, `/api/v1/mil-int/search` returns 503.
+
+## §11 Out of scope (future)
 
 - Live PDF text extraction + OCR (defer to a follow-up task).
 - Translation pipeline for non-English sources.
 - Bilateral authority store (currently a static curated list).
-- Pluggable search backends — only the contract is defined.
+- Vector / semantic search (current backend is BM25 / lexical only).
