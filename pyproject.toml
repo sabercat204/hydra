@@ -67,6 +67,11 @@ dependencies = [
     # Monitoring / observability (P12)
     "prometheus-client>=0.20",
     "prometheus-fastapi-instrumentator>=7.0",
+    # Sloptropy workspace shared vocabulary (License, AccessPolicy,
+    # observed upstream rate limits). Pinned at the workspace path for
+    # local dev; CI / fresh installs should pin via the GitHub URL:
+    #   pip install "sloptropy-common @ git+ssh://git@github.com/sabercat204/sloptropy-common.git@main"
+    "sloptropy-common",
 ]
 
 [project.optional-dependencies]

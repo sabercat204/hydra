@@ -5,11 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel, Field
-
-
-_AccessPolicy = Literal[
-    "open", "registration", "subscription", "restricted", "archived", "monitor_only"
-]
+from sloptropy_common import AccessPolicy
 
 
 class ManifestEntry(BaseModel):
@@ -19,7 +15,7 @@ class ManifestEntry(BaseModel):
     url: str
     format: str
     notes: str = ""
-    access_policy: _AccessPolicy
+    access_policy: AccessPolicy
     ingestable: bool
 
 

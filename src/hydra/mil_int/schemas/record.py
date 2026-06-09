@@ -6,11 +6,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
-
-
-_AccessPolicy = Literal[
-    "open", "registration", "subscription", "restricted", "archived", "monitor_only"
-]
+from sloptropy_common import AccessPolicy
 
 
 class MilIntRecord(BaseModel):
@@ -23,7 +19,7 @@ class MilIntRecord(BaseModel):
     title: str
     url: str
     content_type: str
-    access_policy: _AccessPolicy = "open"
+    access_policy: AccessPolicy = AccessPolicy.OPEN
     classification: Literal["UNCLASSIFIED"] = "UNCLASSIFIED"
     ingestion_timestamp: datetime
     content_hash: str

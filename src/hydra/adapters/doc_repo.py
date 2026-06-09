@@ -27,6 +27,7 @@ from urllib.parse import urljoin, urlparse
 import aiohttp
 import structlog
 from bs4 import BeautifulSoup
+from sloptropy_common import AccessPolicy, is_auto_ingestable
 
 from hydra.adapters.base import AdapterHealth, BaseAdapter, HealthStatus, RawPayload
 from hydra.adapters.exceptions import FetchError
@@ -78,21 +79,28 @@ class DocRepoAdapter(BaseAdapter):
         return self._cfg.get(key, default)
 
     @property
-    def _access_policy(self) -> str:
-        if self._registry_source is not None:
-            return self._registry_source.access_policy
-        return self._get("access_policy", "open")
+    def _access_policy(self) -> AccessPolicy:
+        raw = (
+            self._registry_source.access_policy
+            if self._registry_source is not None
+            else self._get("access_policy", AccessPolicy.OPEN.value)
+        )
+        try:
+            return AccessPolicy(raw)
+        except ValueError:
+            return AccessPolicy.OPEN
 
     def _is_ingestable(self) -> bool:
-        """Honour per-source access_policy — only ``open`` and credentialed
-        ``registration`` are auto-fetched."""
+        """Honour per-source access_policy. ``open`` is always ingestable;
+        ``registration`` requires that operator credentials be present.
+        Anything else short-circuits."""
         policy = self._access_policy
-        if policy == "open":
-            return True
-        if policy == "registration":
+        if not is_auto_ingestable(policy):
+            return False
+        if policy == AccessPolicy.REGISTRATION:
             creds = (self.settings.credentials or {}).get(self.stream_id)
             return bool(creds)
-        return False
+        return True
 
     def _list_url(self) -> str:
         url = self._get("list_url")
@@ -145,7 +153,7 @@ class DocRepoAdapter(BaseAdapter):
         if not self._is_ingestable():
             self._log.info(
                 "doc_repo_skip_unfetchable",
-                access_policy=self._access_policy,
+                access_policy=self._access_policy.value,
             )
             return RawPayload(
                 stream_id=self.stream_id,
@@ -153,7 +161,7 @@ class DocRepoAdapter(BaseAdapter):
                 content=b"",
                 content_type="text/plain",
                 http_status=204,
-                headers={"x-doc-repo-skipped": self._access_policy},
+                headers={"x-doc-repo-skipped": self._access_policy.value},
             )
 
         list_url = self._list_url()
@@ -336,6 +344,7 @@ class DocRepoAdapter(BaseAdapter):
         country = self._get("country", "")
         content_type = self._get("content_type", "research_reports")
         access_policy = self._access_policy
+        access_policy_value = access_policy.value
 
         # Optional blob download — defaults off so first-pass ingestion
         # stays quick and the caller can opt in once MinIO is provisioned.
@@ -352,18 +361,18 @@ class DocRepoAdapter(BaseAdapter):
                 "tier": int(tier_id),
                 "country": country,
                 "content_type": content_type,
-                "access_policy": access_policy,
+                "access_policy": access_policy_value,
                 "discovered_at": rec.get("discovered_at"),
                 "language": rec.get("language", "en"),
             }
 
-            if download_blobs and access_policy in ("open", "registration"):
+            if download_blobs and is_auto_ingestable(access_policy):
                 blob = self._download_blob_sync(doc_url, blob_limit)
                 if blob is not None:
                     payload["_binary_artifact"] = blob
 
             raw_hash = compute_raw_hash(doc_url.encode("utf-8"))
-            tags = ["mil_int", source_name, content_type, access_policy]
+            tags = ["mil_int", source_name, content_type, access_policy_value]
             if country:
                 tags.append(country)
 

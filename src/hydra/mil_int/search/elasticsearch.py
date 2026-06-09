@@ -22,6 +22,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sloptropy_common import AccessPolicy
+
 from hydra.mil_int.schemas.record import MilIntRecord
 from hydra.mil_int.schemas.search import (
     SearchFacet,
@@ -187,7 +189,9 @@ def _hit_to_record(hit: dict[str, Any]) -> MilIntRecord | None:
             title=str(payload.get("title", "")),
             url=str(payload.get("doc_url") or src.get("source_url", "")),
             content_type=str(payload.get("content_type", "research_reports")),
-            access_policy=payload.get("access_policy", "open"),
+            access_policy=AccessPolicy(
+                payload.get("access_policy", AccessPolicy.OPEN.value)
+            ),
             ingestion_timestamp=src.get("ingested_at") or src.get("timestamp"),
             content_hash=str(src.get("raw_hash", hit.get("_id", ""))),
             abstract=str(payload.get("abstract", "")),

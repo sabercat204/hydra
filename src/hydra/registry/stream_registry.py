@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import yaml
 
+from sloptropy_common import AccessPolicy
+
 
 @dataclass(frozen=True)
 class StreamSource:
@@ -82,14 +84,12 @@ class StreamRegistry:
         ]
 
 
-_VALID_ACCESS_POLICIES = {
-    "open",
-    "registration",
-    "subscription",
-    "restricted",
-    "archived",
-    "monitor_only",
-}
+_VALID_ACCESS_POLICIES: frozenset[str] = frozenset(p.value for p in AccessPolicy)
+
+
+def _coerce_access_policy(raw: str) -> str:
+    """Validate ``raw`` against :class:`AccessPolicy`; fall back to ``open``."""
+    return raw if raw in _VALID_ACCESS_POLICIES else AccessPolicy.OPEN.value
 
 
 def _parse_source(raw: Any) -> StreamSource:
@@ -103,9 +103,10 @@ def _parse_source(raw: Any) -> StreamSource:
         parts = raw.split("|")
         while len(parts) < 5:
             parts.append("")
-        access_policy = parts[5].strip() if len(parts) > 5 and parts[5].strip() else "open"
-        if access_policy not in _VALID_ACCESS_POLICIES:
-            access_policy = "open"
+        access_policy_raw = (
+            parts[5].strip() if len(parts) > 5 and parts[5].strip() else AccessPolicy.OPEN.value
+        )
+        access_policy = _coerce_access_policy(access_policy_raw)
         return StreamSource(
             name=parts[0].strip(),
             url=parts[1].strip(),
@@ -115,9 +116,9 @@ def _parse_source(raw: Any) -> StreamSource:
             access_policy=access_policy,
         )
     if isinstance(raw, dict):
-        access_policy = str(raw.get("access_policy", "open"))
-        if access_policy not in _VALID_ACCESS_POLICIES:
-            access_policy = "open"
+        access_policy = _coerce_access_policy(
+            str(raw.get("access_policy", AccessPolicy.OPEN.value))
+        )
         return StreamSource(
             name=raw.get("name", ""),
             url=raw.get("url", ""),

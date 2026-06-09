@@ -86,7 +86,7 @@ def _matches(record: MilIntRecord, req: SearchRequest, tokens: list[str]) -> boo
         return False
     if req.content_type and record.content_type not in req.content_type:
         return False
-    if req.access_policy and record.access_policy not in req.access_policy:
+    if req.access_policy and record.access_policy.value not in req.access_policy:
         return False
     if req.language and record.language not in req.language:
         return False
@@ -103,7 +103,7 @@ def _build_facets(records: list[MilIntRecord]) -> list[SearchFacet]:
         ("tier", lambda r: str(r.tier)),
         ("country", lambda r: r.country_org or ""),
         ("content_type", lambda r: r.content_type),
-        ("access_policy", lambda r: r.access_policy),
+        ("access_policy", lambda r: r.access_policy.value),
         ("language", lambda r: r.language),
     ]
     facets: list[SearchFacet] = []

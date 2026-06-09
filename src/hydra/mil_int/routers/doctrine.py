@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from sloptropy_common import AccessPolicy, is_auto_ingestable
 
 from hydra.mil_int.dependencies import get_mil_int_settings, get_stream_registry
 from hydra.mil_int.schemas.manifest import ManifestEntry
@@ -30,7 +31,8 @@ def doctrine_sources(
         if tier is None:
             continue
         for src in tier.sources:
-            if not include_archived and src.access_policy == "archived":
+            policy = AccessPolicy(src.access_policy)
+            if not include_archived and policy == AccessPolicy.ARCHIVED:
                 continue
             out.append(
                 ManifestEntry(
@@ -40,8 +42,8 @@ def doctrine_sources(
                     url=src.url,
                     format=src.format,
                     notes=src.notes,
-                    access_policy=src.access_policy,  # type: ignore[arg-type]
-                    ingestable=src.access_policy in {"open", "registration"},
+                    access_policy=policy,
+                    ingestable=is_auto_ingestable(policy),
                 )
             )
     return out

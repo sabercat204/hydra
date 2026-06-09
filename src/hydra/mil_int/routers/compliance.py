@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from sloptropy_common import AccessPolicy, is_auto_ingestable
 
 from hydra.mil_int.dependencies import get_mil_int_settings, get_stream_registry
 from hydra.mil_int.schemas.manifest import ManifestEntry
@@ -45,6 +46,7 @@ def compliance_sources(
             if key in seen:
                 continue
             seen.add(key)
+            policy = AccessPolicy(src.access_policy)
             out.append(
                 ManifestEntry(
                     tier=tid,
@@ -53,8 +55,8 @@ def compliance_sources(
                     url=src.url,
                     format=src.format,
                     notes=src.notes,
-                    access_policy=src.access_policy,  # type: ignore[arg-type]
-                    ingestable=src.access_policy in {"open", "registration"},
+                    access_policy=policy,
+                    ingestable=is_auto_ingestable(policy),
                 )
             )
     return out

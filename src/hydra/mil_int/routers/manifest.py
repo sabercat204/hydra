@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from sloptropy_common import AccessPolicy, is_auto_ingestable
 
 from hydra.mil_int.dependencies import get_mil_int_settings, get_stream_registry
 from hydra.mil_int.schemas.manifest import ManifestEntry, ManifestResponse
@@ -11,9 +12,6 @@ from hydra.registry.stream_registry import StreamRegistry
 
 
 router = APIRouter(prefix="/api/v1/mil-int", tags=["mil-int"])
-
-
-_INGESTABLE_POLICIES = {"open", "registration"}
 
 
 @router.get("/manifest", response_model=ManifestResponse)
@@ -34,9 +32,9 @@ def get_manifest(
         if tier is None:
             continue
         for src in tier.sources:
-            policy = src.access_policy
-            is_ingestable = policy in _INGESTABLE_POLICIES
-            if is_ingestable:
+            policy = AccessPolicy(src.access_policy)
+            entry_ingestable = is_auto_ingestable(policy)
+            if entry_ingestable:
                 ingestable += 1
             entries.append(
                 ManifestEntry(
@@ -46,8 +44,8 @@ def get_manifest(
                     url=src.url,
                     format=src.format,
                     notes=src.notes,
-                    access_policy=policy,  # type: ignore[arg-type]
-                    ingestable=is_ingestable,
+                    access_policy=policy,
+                    ingestable=entry_ingestable,
                 )
             )
     return ManifestResponse(
